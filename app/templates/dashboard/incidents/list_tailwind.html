@@ -1,0 +1,215 @@
+{% extends "dashboard/base_tailwind.html" %}
+{% load humanize %}
+
+{% block title %}Incidents - IMAS Manager{% endblock %}
+{% block page_title %}Incidents{% endblock %}
+
+{% block page_actions %}
+<div class="flex items-center gap-3">
+    <a href="{% url 'dashboard:incident_list' %}?export=csv" 
+       class="inline-flex items-center gap-2 px-3 py-2 text-sm bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">
+        <i class="fa-solid fa-file-csv"></i>
+        Export CSV
+    </a>
+    <a href="{% url 'dashboard:incident_create' %}" 
+       class="inline-flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg transition-colors">
+        <i class="fa-solid fa-plus"></i>
+        Déclarer
+    </a>
+</div>
+{% endblock %}
+
+{% block content %}
+<!-- Filters -->
+<div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-4 mb-6">
+    <form method="get" class="grid grid-cols-1 md:grid-cols-6 gap-4 items-end">
+        <div>
+            <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Statut</label>
+            <select name="status" class="w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                <option value="">Tous les statuts</option>
+                {% for value, label in statuses %}
+                <option value="{{ value }}" {% if current_filters.status == value %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Sévérité</label>
+            <select name="severity" class="w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                <option value="">Toutes</option>
+                {% for value, label in severities %}
+                <option value="{{ value }}" {% if current_filters.severity == value %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Service</label>
+            <select name="service" class="w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                <option value="">Tous les services</option>
+                {% for service in services %}
+                <option value="{{ service.id }}" {% if current_filters.service == service.id|stringformat:"s" %}selected{% endif %}>{{ service.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="md:col-span-2">
+            <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Recherche</label>
+            <input type="text" name="q" value="{{ current_filters.q }}" placeholder="ID, titre..."
+                   class="w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+        </div>
+        <div class="flex gap-2">
+            <button type="submit" class="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors">
+                <i class="fa-solid fa-search"></i>
+            </button>
+            <a href="{% url 'dashboard:incident_list' %}" class="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">
+                <i class="fa-solid fa-times"></i>
+            </a>
+        </div>
+    </form>
+</div>
+
+<!-- Stats Bar -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="bg-red-50 dark:bg-red-900/20 rounded-lg p-4 text-center">
+        <p class="text-2xl font-bold text-red-600 dark:text-red-400">{{ stats.triggered|default:0 }}</p>
+        <p class="text-xs text-red-600/70 dark:text-red-400/70 uppercase">Triggered</p>
+    </div>
+    <div class="bg-orange-50 dark:bg-orange-900/20 rounded-lg p-4 text-center">
+        <p class="text-2xl font-bold text-orange-600 dark:text-orange-400">{{ stats.acknowledged|default:0 }}</p>
+        <p class="text-xs text-orange-600/70 dark:text-orange-400/70 uppercase">Acknowledged</p>
+    </div>
+    <div class="bg-green-50 dark:bg-green-900/20 rounded-lg p-4 text-center">
+        <p class="text-2xl font-bold text-green-600 dark:text-green-400">{{ stats.resolved|default:0 }}</p>
+        <p class="text-xs text-green-600/70 dark:text-green-400/70 uppercase">Resolved</p>
+    </div>
+    <div class="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 text-center">
+        <p class="text-2xl font-bold text-gray-600 dark:text-gray-400">{{ page_obj.paginator.count }}</p>
+        <p class="text-xs text-gray-500 uppercase">Total filtré</p>
+    </div>
+</div>
+
+<!-- Incidents Table -->
+<div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden">
+    {% if incidents %}
+    <div class="overflow-x-auto">
+        <table class="w-full">
+            <thead class="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700">
+                <tr>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">ID</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Titre</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Service</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Sévérité</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Statut</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Lead</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Créé</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Liens</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                {% for incident in incidents %}
+                <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer"
+                    onclick="window.location='{% url 'dashboard:incident_detail' pk=incident.pk %}'">
+                    <td class="px-4 py-4">
+                        <span class="font-mono text-sm text-blue-600 dark:text-blue-400 font-medium">{{ incident.short_id }}</span>
+                    </td>
+                    <td class="px-4 py-4">
+                        <span class="text-sm text-gray-900 dark:text-white">{{ incident.title|truncatechars:50 }}</span>
+                    </td>
+                    <td class="px-4 py-4">
+                        {% if incident.service %}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
+                            {{ incident.service.name }}
+                        </span>
+                        {% else %}
+                        <span class="text-gray-400">—</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-4 py-4">
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-bold uppercase
+                            {% if incident.severity == 'SEV1_CRITICAL' %}bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300
+                            {% elif incident.severity == 'SEV2_HIGH' %}bg-orange-100 text-orange-800 dark:bg-orange-900/50 dark:text-orange-300
+                            {% elif incident.severity == 'SEV3_MEDIUM' %}bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-300
+                            {% else %}bg-cyan-100 text-cyan-800 dark:bg-cyan-900/50 dark:text-cyan-300{% endif %}">
+                            {{ incident.get_severity_display }}
+                        </span>
+                    </td>
+                    <td class="px-4 py-4">
+                        <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-xs font-medium
+                            {% if incident.status == 'TRIGGERED' %}bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300
+                            {% elif incident.status == 'ACKNOWLEDGED' %}bg-orange-100 text-orange-800 dark:bg-orange-900/50 dark:text-orange-300
+                            {% elif incident.status == 'RESOLVED' %}bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300
+                            {% else %}bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300{% endif %}">
+                            {% if incident.status == 'TRIGGERED' %}<span class="w-1.5 h-1.5 bg-current rounded-full animate-pulse"></span>{% endif %}
+                            {{ incident.get_status_display }}
+                        </span>
+                    </td>
+                    <td class="px-4 py-4 text-sm text-gray-600 dark:text-gray-400">
+                        {% if incident.lead %}{{ incident.lead.username }}{% else %}—{% endif %}
+                    </td>
+                    <td class="px-4 py-4 text-sm text-gray-500 dark:text-gray-400">
+                        {{ incident.created_at|date:"d/m H:i" }}
+                    </td>
+                    <td class="px-4 py-4" onclick="event.stopPropagation()">
+                        <div class="flex items-center gap-2">
+                            {% if incident.lid_link %}
+                            <a href="{{ incident.lid_link }}" target="_blank" 
+                               class="text-orange-500 hover:text-orange-600" title="Document LID">
+                                <i class="fa-solid fa-file-lines"></i>
+                            </a>
+                            {% endif %}
+                            {% if incident.war_room_link %}
+                            <a href="{{ incident.war_room_link }}" target="_blank" 
+                               class="text-purple-500 hover:text-purple-600" title="War Room">
+                                <i class="fa-brands fa-slack"></i>
+                            </a>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    
+    <!-- Pagination -->
+    {% if page_obj.has_other_pages %}
+    <div class="px-4 py-3 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between">
+        <p class="text-sm text-gray-500 dark:text-gray-400">
+            Page {{ page_obj.number }} sur {{ page_obj.paginator.num_pages }} 
+            ({{ page_obj.paginator.count }} incidents)
+        </p>
+        <nav class="flex items-center gap-1">
+            {% if page_obj.has_previous %}
+            <a href="?page=1{% for key, value in current_filters.items %}{% if value %}&{{ key }}={{ value }}{% endif %}{% endfor %}" 
+               class="px-3 py-1.5 text-sm rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">
+                <i class="fa-solid fa-angles-left"></i>
+            </a>
+            <a href="?page={{ page_obj.previous_page_number }}{% for key, value in current_filters.items %}{% if value %}&{{ key }}={{ value }}{% endif %}{% endfor %}" 
+               class="px-3 py-1.5 text-sm rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">
+                <i class="fa-solid fa-angle-left"></i>
+            </a>
+            {% endif %}
+            
+            <span class="px-3 py-1.5 text-sm rounded-lg bg-blue-600 text-white">{{ page_obj.number }}</span>
+            
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% for key, value in current_filters.items %}{% if value %}&{{ key }}={{ value }}{% endif %}{% endfor %}" 
+               class="px-3 py-1.5 text-sm rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">
+                <i class="fa-solid fa-angle-right"></i>
+            </a>
+            <a href="?page={{ page_obj.paginator.num_pages }}{% for key, value in current_filters.items %}{% if value %}&{{ key }}={{ value }}{% endif %}{% endfor %}" 
+               class="px-3 py-1.5 text-sm rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">
+                <i class="fa-solid fa-angles-right"></i>
+            </a>
+            {% endif %}
+        </nav>
+    </div>
+    {% endif %}
+    
+    {% else %}
+    <div class="p-12 text-center">
+        <i class="fa-solid fa-inbox text-gray-300 dark:text-gray-600 text-5xl mb-4"></i>
+        <p class="text-gray-500 dark:text-gray-400 mb-2">Aucun incident trouvé</p>
+        <p class="text-sm text-gray-400 dark:text-gray-500">Modifiez vos filtres ou créez un nouvel incident</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

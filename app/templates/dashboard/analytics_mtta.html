@@ -1,0 +1,98 @@
+{% extends "dashboard/base.html" %}
+{% load i18n %}
+
+{% block title %}{% trans "MTTA Analytics" %} - IMAS{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+  <div class="row mb-4">
+    <div class="col">
+      <h1>{% trans "Mean Time To Acknowledge (MTTA)" %}</h1>
+      <p class="text-muted">
+        {% trans "Analysis of incident acknowledgment times" %}
+      </p>
+    </div>
+  </div>
+
+  <!-- Summary Card -->
+  <div class="row mb-4">
+    <div class="col-md-4">
+      <div class="card">
+        <div class="card-body text-center">
+          <h5 class="card-title">{% trans "Average MTTA" %}</h5>
+          <h2 class="display-4">{{ summary.mtta_formatted|default:"N/A" }}</h2>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card">
+        <div class="card-body text-center">
+          <h5 class="card-title">{% trans "P50 MTTA" %}</h5>
+          <h2 class="display-4">
+            {{ summary.p50_tta|floatformat:0|default:"N/A" }}m
+          </h2>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card">
+        <div class="card-body text-center">
+          <h5 class="card-title">{% trans "P90 MTTA" %}</h5>
+          <h2 class="display-4">
+            {{ summary.p90_tta|floatformat:0|default:"N/A" }}m
+          </h2>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Trend Chart -->
+  <div class="row">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header">
+          <h5 class="mb-0">{% trans "MTTA Trend" %}</h5>
+        </div>
+        <div class="card-body">
+          <canvas id="mttaChart" height="300"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+      const ctx = document.getElementById('mttaChart').getContext('2d');
+      const trendData = {{ trend_data|safe }};
+
+      new Chart(ctx, {
+          type: 'line',
+          data: {
+              labels: trendData.map(d => d.date),
+              datasets: [{
+                  label: 'MTTA (minutes)',
+                  data: trendData.map(d => d.avg_mtta),
+                  borderColor: 'rgb(75, 192, 192)',
+                  tension: 0.1,
+                  fill: false
+              }]
+          },
+          options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              scales: {
+                  y: {
+                      beginAtZero: true,
+                      title: {
+                          display: true,
+                          text: 'Minutes'
+                      }
+                  }
+              }
+          }
+      });
+  });
+</script>
+{% endblock %}

@@ -1,0 +1,176 @@
+# =============================================================================
+# IMAS Manager - Web Deployment
+# Django application with Gunicorn
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: imas-web
+  namespace: imas
+  labels:
+    app.kubernetes.io/name: imas-manager
+    app.kubernetes.io/component: web
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: imas-manager
+      app.kubernetes.io/component: web
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: imas-manager
+        app.kubernetes.io/component: web
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: imas-sa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      
+      initContainers:
+        - name: migrate
+          image: ghcr.io/seemy-ping/imas-manager:latest
+          command: ["python", "manage.py", "migrate", "--noinput"]
+          envFrom:
+            - configMapRef:
+                name: imas-config
+            - secretRef:
+                name: imas-secrets
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+        
+        - name: collectstatic
+          image: ghcr.io/seemy-ping/imas-manager:latest
+          command: ["python", "manage.py", "collectstatic", "--noinput"]
+          envFrom:
+            - configMapRef:
+                name: imas-config
+            - secretRef:
+                name: imas-secrets
+          volumeMounts:
+            - name: static-files
+              mountPath: /app/staticfiles
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop: ["ALL"]
+
+      containers:
+        - name: web
+          image: ghcr.io/seemy-ping/imas-manager:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8000
+              name: http
+              protocol: TCP
+          
+          envFrom:
+            - configMapRef:
+                name: imas-config
+            - secretRef:
+                name: imas-secrets
+          
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+          
+          # Liveness probe - is the container alive?
+          livenessProbe:
+            httpGet:
+              path: /health/live/
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          
+          # Readiness probe - is the container ready to serve traffic?
+          readinessProbe:
+            httpGet:
+              path: /health/ready/
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          
+          # Startup probe - for slow starting containers
+          startupProbe:
+            httpGet:
+              path: /health/live/
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 30
+          
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          
+          volumeMounts:
+            - name: static-files
+              mountPath: /app/staticfiles
+            - name: tmp
+              mountPath: /tmp
+      
+      volumes:
+        - name: static-files
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+      
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: imas-manager
+                    app.kubernetes.io/component: web
+                topologyKey: kubernetes.io/hostname
+
+---
+# =============================================================================
+# Service for Web Deployment
+# =============================================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: imas-web
+  namespace: imas
+  labels:
+    app.kubernetes.io/name: imas-manager
+    app.kubernetes.io/component: web
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: imas-manager
+    app.kubernetes.io/component: web

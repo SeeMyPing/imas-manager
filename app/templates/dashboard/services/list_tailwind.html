@@ -1,0 +1,118 @@
+{% extends "dashboard/base_tailwind.html" %}
+
+{% block title %}Services - IMAS Manager{% endblock %}
+
+{% block page_title %}
+<i class="fa-solid fa-server text-blue-500 mr-2"></i> Services
+{% endblock %}
+
+{% block page_actions %}
+<div class="relative">
+    <input type="text" id="service-search" placeholder="Rechercher un service..." class="w-64 pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+    <i class="fa-solid fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm mb-6 p-4">
+    <div class="flex flex-wrap items-center gap-4 text-sm">
+        <span class="text-gray-500 dark:text-gray-400">{{ object_list|length }} services</span>
+        <div class="flex items-center gap-2 ml-auto">
+            <span class="text-gray-500 dark:text-gray-400">Filtrer :</span>
+            <button data-tier="all" class="tier-filter px-3 py-1 rounded-lg bg-blue-600 text-white text-sm font-medium">Tous</button>
+            <button data-tier="TIER1_CRITICAL" class="tier-filter px-3 py-1 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 text-sm font-medium hover:bg-gray-200 dark:hover:bg-gray-600">Tier 1</button>
+            <button data-tier="TIER2_IMPORTANT" class="tier-filter px-3 py-1 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 text-sm font-medium hover:bg-gray-200 dark:hover:bg-gray-600">Tier 2</button>
+            <button data-tier="TIER3_STANDARD" class="tier-filter px-3 py-1 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 text-sm font-medium hover:bg-gray-200 dark:hover:bg-gray-600">Tier 3</button>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="services-grid">
+    {% for service in object_list %}
+    <div class="service-card bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden hover:shadow-lg transition-shadow" data-tier="{{ service.tier }}" data-name="{{ service.name|lower }}">
+        <div class="p-6">
+            <div class="flex items-start justify-between mb-4">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-lg flex items-center justify-center {% if service.tier == 'TIER1_CRITICAL' %}bg-red-100 dark:bg-red-900/50 text-red-600 dark:text-red-400{% elif service.tier == 'TIER2_IMPORTANT' %}bg-orange-100 dark:bg-orange-900/50 text-orange-600 dark:text-orange-400{% else %}bg-cyan-100 dark:bg-cyan-900/50 text-cyan-600 dark:text-cyan-400{% endif %}">
+                        <i class="fa-solid fa-server"></i>
+                    </div>
+                    <div>
+                        <h3 class="font-semibold text-gray-900 dark:text-white">{{ service.name }}</h3>
+                        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium {% if service.tier == 'TIER1_CRITICAL' %}bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300{% elif service.tier == 'TIER2_IMPORTANT' %}bg-orange-100 text-orange-700 dark:bg-orange-900/50 dark:text-orange-300{% else %}bg-cyan-100 text-cyan-700 dark:bg-cyan-900/50 dark:text-cyan-300{% endif %}">{{ service.get_tier_display }}</span>
+                    </div>
+                </div>
+                <span class="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium {% if service.active_incidents > 0 %}bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300{% else %}bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300{% endif %}">
+                    {% if service.active_incidents > 0 %}
+                    <span class="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></span>
+                    {{ service.active_incidents }} actif{% if service.active_incidents > 1 %}s{% endif %}
+                    {% else %}
+                    <i class="fa-solid fa-check"></i> OK
+                    {% endif %}
+                </span>
+            </div>
+            
+            {% if service.description %}
+            <p class="text-sm text-gray-500 dark:text-gray-400 mb-4 line-clamp-2">{{ service.description }}</p>
+            {% endif %}
+            
+            <div class="pt-4 border-t border-gray-100 dark:border-gray-700">
+                <div class="flex items-center justify-between text-sm">
+                    <div class="flex items-center gap-2 text-gray-500 dark:text-gray-400">
+                        <i class="fa-solid fa-users"></i>
+                        <span>{% if service.owner_team %}{{ service.owner_team.name }}{% else %}—{% endif %}</span>
+                    </div>
+                    <div class="flex items-center gap-2 text-gray-500 dark:text-gray-400">
+                        <i class="fa-solid fa-chart-simple"></i>
+                        <span>{{ service.total_incidents|default:0 }} incidents</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% empty %}
+    <div class="col-span-full">
+        <div class="text-center py-12">
+            <i class="fa-solid fa-server text-4xl text-gray-300 dark:text-gray-600 mb-4"></i>
+            <p class="text-gray-500 dark:text-gray-400">Aucun service configuré.</p>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const searchInput = document.getElementById('service-search');
+    const tierFilters = document.querySelectorAll('.tier-filter');
+    const cards = document.querySelectorAll('.service-card');
+    let activeTier = 'all';
+    
+    function filterCards() {
+        const searchTerm = searchInput.value.toLowerCase();
+        cards.forEach(card => {
+            const name = card.dataset.name;
+            const tier = card.dataset.tier;
+            const matchesSearch = name.includes(searchTerm);
+            const matchesTier = activeTier === 'all' || tier === activeTier;
+            card.style.display = matchesSearch && matchesTier ? 'block' : 'none';
+        });
+    }
+    
+    searchInput?.addEventListener('input', filterCards);
+    
+    tierFilters.forEach(btn => {
+        btn.addEventListener('click', function() {
+            tierFilters.forEach(b => {
+                b.classList.remove('bg-blue-600', 'text-white');
+                b.classList.add('bg-gray-100', 'dark:bg-gray-700', 'text-gray-600', 'dark:text-gray-300');
+            });
+            this.classList.remove('bg-gray-100', 'dark:bg-gray-700', 'text-gray-600', 'dark:text-gray-300');
+            this.classList.add('bg-blue-600', 'text-white');
+            activeTier = this.dataset.tier;
+            filterCards();
+        });
+    });
+});
+</script>
+{% endblock %}

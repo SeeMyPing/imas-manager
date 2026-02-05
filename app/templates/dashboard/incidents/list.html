@@ -1,0 +1,196 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}Incidents - IMAS Manager{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-0">Incidents</h1>
+            <p class="text-muted mb-0">Liste de tous les incidents</p>
+        </div>
+        <a href="{% url 'dashboard:incident_create' %}" class="btn btn-danger">
+            <i class="bi bi-plus-lg me-1"></i> Déclarer un incident
+        </a>
+    </div>
+    
+    <!-- Filters -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-body">
+            <form method="get" class="row g-3 align-items-end">
+                <div class="col-md-3">
+                    <label class="form-label small text-muted">Statut</label>
+                    <select name="status" class="form-select form-select-sm">
+                        <option value="">Tous les statuts</option>
+                        {% for value, label in statuses %}
+                        <option value="{{ value }}" {% if current_filters.status == value %}selected{% endif %}>
+                            {{ label }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small text-muted">Sévérité</label>
+                    <select name="severity" class="form-select form-select-sm">
+                        <option value="">Toutes les sévérités</option>
+                        {% for value, label in severities %}
+                        <option value="{{ value }}" {% if current_filters.severity == value %}selected{% endif %}>
+                            {{ label }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small text-muted">Service</label>
+                    <select name="service" class="form-select form-select-sm">
+                        <option value="">Tous les services</option>
+                        {% for service in services %}
+                        <option value="{{ service.id }}" {% if current_filters.service == service.id|stringformat:"s" %}selected{% endif %}>
+                            {{ service.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small text-muted">Recherche</label>
+                    <input type="text" name="q" class="form-control form-control-sm" 
+                           placeholder="ID ou titre..." value="{{ current_filters.q }}">
+                </div>
+                <div class="col-md-1">
+                    <button type="submit" class="btn btn-primary btn-sm w-100">
+                        <i class="bi bi-search"></i>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Incidents Table -->
+    <div class="card shadow-sm">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width: 100px;">ID</th>
+                        <th>Titre</th>
+                        <th style="width: 150px;">Service</th>
+                        <th style="width: 100px;">Sévérité</th>
+                        <th style="width: 120px;">Statut</th>
+                        <th style="width: 120px;">Lead</th>
+                        <th style="width: 150px;">Créé</th>
+                        <th style="width: 80px;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for incident in incidents %}
+                    <tr class="incident-row">
+                        <td>
+                            <a href="{% url 'dashboard:incident_detail' pk=incident.pk %}" 
+                               class="text-decoration-none fw-bold font-monospace">
+                                {{ incident.short_id }}
+                            </a>
+                        </td>
+                        <td>
+                            <a href="{% url 'dashboard:incident_detail' pk=incident.pk %}" 
+                               class="text-decoration-none text-dark">
+                                {{ incident.title|truncatechars:60 }}
+                            </a>
+                            {% if incident.lid_link %}
+                            <a href="{{ incident.lid_link }}" target="_blank" class="ms-1" title="Document LID">
+                                <i class="bi bi-file-text text-muted"></i>
+                            </a>
+                            {% endif %}
+                            {% if incident.war_room_link %}
+                            <a href="{{ incident.war_room_link }}" target="_blank" class="ms-1" title="War Room">
+                                <i class="bi bi-chat-dots text-muted"></i>
+                            </a>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if incident.service %}
+                            <span class="badge bg-secondary">{{ incident.service.name }}</span>
+                            {% else %}
+                            <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="badge severity-badge severity-{{ incident.severity|lower }}">
+                                {{ incident.get_severity_display }}
+                            </span>
+                        </td>
+                        <td>
+                            <span class="badge status-{{ incident.status|lower }}">
+                                {{ incident.get_status_display }}
+                            </span>
+                        </td>
+                        <td>
+                            {% if incident.lead %}
+                            <small>{{ incident.lead.username }}</small>
+                            {% else %}
+                            <small class="text-muted">Non assigné</small>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <small class="text-muted">{{ incident.created_at|date:"d/m/Y H:i" }}</small>
+                        </td>
+                        <td>
+                            <div class="btn-group btn-group-sm">
+                                <a href="{% url 'dashboard:incident_detail' pk=incident.pk %}" 
+                                   class="btn btn-outline-secondary" title="Voir">
+                                    <i class="bi bi-eye"></i>
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="8" class="text-center py-5 text-muted">
+                            <i class="bi bi-inbox" style="font-size: 3rem;"></i>
+                            <p class="mt-2 mb-0">Aucun incident trouvé</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Pagination -->
+        {% if page_obj.has_other_pages %}
+        <div class="card-footer bg-white">
+            <nav aria-label="Pagination">
+                <ul class="pagination pagination-sm mb-0 justify-content-center">
+                    {% if page_obj.has_previous %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% for key, value in current_filters.items %}{% if value %}&{{ key }}={{ value }}{% endif %}{% endfor %}">
+                            <i class="bi bi-chevron-left"></i>
+                        </a>
+                    </li>
+                    {% endif %}
+                    
+                    {% for num in page_obj.paginator.page_range %}
+                    {% if num == page_obj.number %}
+                    <li class="page-item active"><span class="page-link">{{ num }}</span></li>
+                    {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ num }}{% for key, value in current_filters.items %}{% if value %}&{{ key }}={{ value }}{% endif %}{% endfor %}">
+                            {{ num }}
+                        </a>
+                    </li>
+                    {% endif %}
+                    {% endfor %}
+                    
+                    {% if page_obj.has_next %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ page_obj.next_page_number }}{% for key, value in current_filters.items %}{% if value %}&{{ key }}={{ value }}{% endif %}{% endfor %}">
+                            <i class="bi bi-chevron-right"></i>
+                        </a>
+                    </li>
+                    {% endif %}
+                </ul>
+            </nav>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

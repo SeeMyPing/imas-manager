@@ -1,0 +1,281 @@
+{% load static %}
+<!doctype html>
+<html lang="fr" class="h-full">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{% block title %}IMAS Manager{% endblock %}</title>
+
+    <!-- Tailwind CSS via CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Heroicons (via CDN for icons) -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+    />
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+    <script>
+      // Tailwind config with custom colors
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              sev1: "#dc2626",
+              sev2: "#ea580c",
+              sev3: "#eab308",
+              sev4: "#06b6d4",
+              triggered: "#dc2626",
+              acknowledged: "#ea580c",
+              resolved: "#16a34a",
+              post_mortem: "#6b7280",
+              sidebar: {
+                DEFAULT: "#1e293b",
+                dark: "#0f172a",
+              },
+            },
+          },
+        },
+      };
+    </script>
+
+    <style>
+      /* Custom animations */
+      @keyframes pulse-slow {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.5;
+        }
+      }
+      .animate-pulse-slow {
+        animation: pulse-slow 2s ease-in-out infinite;
+      }
+
+      /* Timeline styles */
+      .timeline {
+        position: relative;
+        padding-left: 2rem;
+      }
+      .timeline::before {
+        content: "";
+        position: absolute;
+        left: 0.5rem;
+        top: 0;
+        bottom: 0;
+        width: 2px;
+        @apply bg-gray-200 dark:bg-gray-700;
+      }
+      .timeline-item {
+        position: relative;
+        padding-bottom: 1.5rem;
+      }
+      .timeline-item::before {
+        content: "";
+        position: absolute;
+        left: -1.5rem;
+        top: 0.25rem;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        @apply bg-gray-400 border-2 border-white dark:border-gray-800;
+      }
+      .timeline-item.status-change::before {
+        @apply bg-blue-500;
+      }
+      .timeline-item.note::before {
+        @apply bg-gray-500;
+      }
+      .timeline-item.alert-sent::before {
+        @apply bg-green-500;
+      }
+      .timeline-item.war-room::before {
+        @apply bg-purple-500;
+      }
+      .timeline-item.document::before {
+        @apply bg-orange-500;
+      }
+
+      /* Scrollbar styling */
+      ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        @apply bg-gray-100 dark:bg-gray-800;
+      }
+      ::-webkit-scrollbar-thumb {
+        @apply bg-gray-300 dark:bg-gray-600 rounded-full;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        @apply bg-gray-400 dark:bg-gray-500;
+      }
+    </style>
+
+    {% block extra_css %}{% endblock %}
+  </head>
+  <body
+    class="h-full bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100"
+  >
+    <div class="flex h-full">
+      <!-- Sidebar -->
+      <aside
+        class="fixed inset-y-0 left-0 w-64 bg-sidebar dark:bg-sidebar-dark flex flex-col z-50"
+      >
+        <!-- Logo -->
+        <a
+          href="{% url 'dashboard:home' %}"
+          class="flex items-center gap-3 px-6 py-5 border-b border-gray-700"
+        >
+          <i class="fa-solid fa-triangle-exclamation text-red-500 text-2xl"></i>
+          <span class="text-xl font-bold text-white">IMAS</span>
+        </a>
+
+        <!-- Navigation -->
+        <nav class="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
+          <a
+            href="{% url 'dashboard:home' %}"
+            class="flex items-center gap-3 px-4 py-3 rounded-lg text-gray-300 hover:bg-white/10 hover:text-white transition-colors {% if request.resolver_match.url_name == 'home' %}bg-white/10 text-white{% endif %}"
+          >
+            <i class="fa-solid fa-gauge-high w-5"></i>
+            <span>Dashboard</span>
+          </a>
+          <a
+            href="{% url 'dashboard:incident_list' %}"
+            class="flex items-center gap-3 px-4 py-3 rounded-lg text-gray-300 hover:bg-white/10 hover:text-white transition-colors {% if 'incident' in request.resolver_match.url_name %}bg-white/10 text-white{% endif %}"
+          >
+            <i class="fa-solid fa-bolt w-5"></i>
+            <span>Incidents</span>
+          </a>
+          <a
+            href="{% url 'dashboard:service_list' %}"
+            class="flex items-center gap-3 px-4 py-3 rounded-lg text-gray-300 hover:bg-white/10 hover:text-white transition-colors {% if request.resolver_match.url_name == 'service_list' %}bg-white/10 text-white{% endif %}"
+          >
+            <i class="fa-solid fa-server w-5"></i>
+            <span>Services</span>
+          </a>
+          <a
+            href="{% url 'dashboard:team_list' %}"
+            class="flex items-center gap-3 px-4 py-3 rounded-lg text-gray-300 hover:bg-white/10 hover:text-white transition-colors {% if request.resolver_match.url_name == 'team_list' %}bg-white/10 text-white{% endif %}"
+          >
+            <i class="fa-solid fa-users w-5"></i>
+            <span>Équipes</span>
+          </a>
+
+          <div class="border-t border-gray-700 my-4"></div>
+
+          <a
+            href="{% url 'dashboard:analytics' %}"
+            class="flex items-center gap-3 px-4 py-3 rounded-lg text-gray-300 hover:bg-white/10 hover:text-white transition-colors {% if 'analytics' in request.resolver_match.url_name %}bg-white/10 text-white{% endif %}"
+          >
+            <i class="fa-solid fa-chart-line w-5"></i>
+            <span>Analytics</span>
+          </a>
+          <a
+            href="{% url 'admin:index' %}"
+            class="flex items-center gap-3 px-4 py-3 rounded-lg text-gray-300 hover:bg-white/10 hover:text-white transition-colors"
+          >
+            <i class="fa-solid fa-gear w-5"></i>
+            <span>Administration</span>
+          </a>
+          <a
+            href="/api/schema/swagger-ui/"
+            class="flex items-center gap-3 px-4 py-3 rounded-lg text-gray-300 hover:bg-white/10 hover:text-white transition-colors"
+          >
+            <i class="fa-solid fa-code w-5"></i>
+            <span>API Docs</span>
+          </a>
+        </nav>
+
+        <!-- User info & Dark Mode Toggle -->
+        <div class="p-4 border-t border-gray-700">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2 text-gray-400 text-sm">
+              <i class="fa-solid fa-user-circle"></i>
+              {% if user.is_authenticated %}
+              <span>{{ user.username }}</span>
+              {% else %}
+              <span>Non connecté</span>
+              {% endif %}
+            </div>
+            <button
+              id="darkModeToggle"
+              class="p-2 rounded-lg text-gray-400 hover:bg-white/10 hover:text-white transition-colors"
+            >
+              <i class="fa-solid fa-moon dark:hidden"></i>
+              <i class="fa-solid fa-sun hidden dark:inline"></i>
+            </button>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Main Content -->
+      <main class="flex-1 ml-64 min-h-screen">
+        <!-- Top bar -->
+        <header
+          class="sticky top-0 z-40 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm border-b border-gray-200 dark:border-gray-700 px-6 py-4"
+        >
+          <div class="flex items-center justify-between">
+            <h1 class="text-xl font-semibold text-gray-900 dark:text-white">
+              {% block page_title %}Dashboard{% endblock %}
+            </h1>
+            <div class="flex items-center gap-4">
+              {% block page_actions %}{% endblock %}
+            </div>
+          </div>
+        </header>
+
+        <!-- Flash Messages -->
+        {% if messages %}
+        <div class="px-6 pt-4">
+          {% for message in messages %}
+          <div
+            class="mb-3 p-4 rounded-lg flex items-center justify-between {% if message.tags == 'success' %}bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200 {% elif message.tags == 'error' %}bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-200 {% elif message.tags == 'warning' %}bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-200 {% else %}bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200{% endif %}"
+          >
+            <span>{{ message }}</span>
+            <button
+              onclick="this.parentElement.remove()"
+              class="hover:opacity-70"
+            >
+              <i class="fa-solid fa-xmark"></i>
+            </button>
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
+
+        <!-- Page Content -->
+        <div class="p-6">{% block content %}{% endblock %}</div>
+      </main>
+    </div>
+
+    <!-- Dark Mode Script -->
+    <script>
+      // Check for saved dark mode preference or system preference
+      if (localStorage.getItem('darkMode') === 'true' ||
+          (!localStorage.getItem('darkMode') && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+          document.documentElement.classList.add('dark');
+      }
+
+      document.getElementById('darkModeToggle').addEventListener('click', function() {
+          document.documentElement.classList.toggle('dark');
+          localStorage.setItem('darkMode', document.documentElement.classList.contains('dark'));
+      });
+
+      // Auto-refresh for active incidents (every 30 seconds)
+      {% if auto_refresh %}
+      setTimeout(function() {
+          location.reload();
+      }, 30000);
+      {% endif %}
+    </script>
+
+    {% block extra_js %}{% endblock %}
+  </body>
+</html>

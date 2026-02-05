@@ -1,0 +1,2397 @@
+openapi: 3.0.3
+info:
+  title: IMAS Manager API
+  version: 1.0.0
+  description: |2
+
+    # IMAS Manager - Incident Management At Scale
+
+    Backend API for incident response orchestration.
+
+    ## Features
+
+    - **Incident Management**: Create, track, and resolve incidents
+    - **Smart Notifications**: Multi-channel alerting (Slack, Email, SMS)
+    - **War Room Automation**: Automatic Slack channel creation for critical incidents
+    - **LID Documents**: Auto-generate Google Docs for incident documentation
+    - **On-Call Management**: Rotation scheduling with escalation support
+
+    ## Authentication
+
+    All API endpoints (except health checks) require authentication via Token.
+
+    ```
+    Authorization: Token <your-api-token>
+    ```
+
+    Obtain a token via `POST /api/token/obtain/` with username/password.
+
+    ## Severity Levels
+
+    | Level | Description | Actions |
+    |-------|-------------|---------|
+    | SEV1 | Critical outage | War Room + LID + SMS alerts |
+    | SEV2 | Major degradation | War Room + LID + Slack alerts |
+    | SEV3 | Minor impact | LID + Slack alerts |
+    | SEV4 | Cosmetic/Low | Slack alerts only |
+
+    ## Rate Limits
+
+    - Anonymous: 100 requests/hour
+    - Authenticated: 1000 requests/hour
+
+    ## Webhooks
+
+    IMAS Manager can send webhooks to external systems when incidents are created or updated.
+    Configure webhook URLs in the admin panel.
+
+    ## Error Responses
+
+    All errors follow a consistent format:
+    ```json
+    {
+      "error": "Human-readable error message",
+      "code": "MACHINE_READABLE_CODE",
+      "details": {"field": ["Field-specific errors"]}
+    }
+    ```
+  contact:
+    name: IMAS Team
+    email: imas-support@example.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+paths:
+  /health/:
+    get:
+      operationId: health_retrieve_2
+      description: Quick health check returning service name and version. Suitable
+        for liveness probes.
+      summary: Basic health check
+      tags:
+      - health
+      security:
+      - tokenAuth: []
+      - cookieAuth: []
+      - TokenAuth: []
+      - {}
+      responses:
+        '200':
+          description: Service is running
+  /health/live/:
+    get:
+      operationId: health_live_retrieve
+      description: "\nKubernetes liveness probe endpoint.\n\nReturns 200 if the application
+        process is alive.\nDoes **not** check dependencies - use /health/ready/ for
+        dependency checks.\n    "
+      summary: Liveness probe
+      tags:
+      - health
+      security:
+      - tokenAuth: []
+      - cookieAuth: []
+      - TokenAuth: []
+      - {}
+      responses:
+        '200':
+          description: Process is alive
+  /health/ready/:
+    get:
+      operationId: health_ready_retrieve
+      description: "\nKubernetes readiness probe endpoint.\n\nChecks all dependencies:\n-
+        **Database**: PostgreSQL connectivity\n- **Redis**: Cache/broker connectivity\n-
+        **Celery**: Worker availability\n\nReturns:\n- **200**: All critical dependencies
+        healthy\n- **503**: One or more critical dependencies unhealthy\n    "
+      summary: Readiness probe
+      tags:
+      - health
+      security:
+      - tokenAuth: []
+      - cookieAuth: []
+      - TokenAuth: []
+      - {}
+      responses:
+        '200':
+          description: Service ready to accept traffic
+        '503':
+          description: Service not ready
+  /health/detailed/:
+    get:
+      operationId: health_detailed_retrieve
+      description: "\nComprehensive health check with full system information.\n\nReturns:\n-
+        Service version and environment info\n- Python and Django versions\n- Dependency
+        health status\n- Active incident statistics\n\n**Security Note:** Consider
+        protecting this endpoint in production.\n    "
+      summary: Detailed health check
+      tags:
+      - health
+      security:
+      - tokenAuth: []
+      - cookieAuth: []
+      - TokenAuth: []
+      - {}
+      responses:
+        '200':
+          description: Detailed health information
+  /api/v1/health/:
+    get:
+      operationId: health_retrieve
+      description: Quick health check endpoint for load balancers and monitoring systems.
+      summary: API Health Check
+      tags:
+      - health
+      security:
+      - tokenAuth: []
+      - cookieAuth: []
+      - TokenAuth: []
+      - {}
+      responses:
+        '200':
+          description: Service is healthy
+  /api/v1/incidents/:
+    get:
+      operationId: incidents_list
+      description: "\nRetrieve a paginated list of all incidents with optional filtering.\n\n**Filtering
+        options:**\n- `status`: Filter by incident status (triggered, acknowledged,
+        resolved)\n- `severity`: Filter by severity level (SEV1, SEV2, SEV3, SEV4)\n-
+        `service`: Filter by service UUID\n\n**Search:** Use `search` parameter to
+        search in title and description.\n\n**Ordering:** Use `ordering` parameter
+        with fields: created_at, severity, status.\n        "
+      summary: List all incidents
+      parameters:
+      - in: query
+        name: ordering
+        schema:
+          type: string
+          enum:
+          - -created_at
+          - -severity
+          - created_at
+          - severity
+        description: Order results by field (prefix with - for descending)
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: search
+        schema:
+          type: string
+        description: Search in title and description
+      - in: query
+        name: service
+        schema:
+          type: string
+        description: Filter by service UUID
+      - in: query
+        name: severity
+        schema:
+          type: string
+          enum:
+          - SEV1
+          - SEV2
+          - SEV3
+          - SEV4
+        description: Filter by severity level
+      - in: query
+        name: status
+        schema:
+          type: string
+          enum:
+          - acknowledged
+          - resolved
+          - triggered
+        description: Filter by incident status
+      tags:
+      - incidents
+      security:
+      - tokenAuth: []
+      - cookieAuth: []
+      - TokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedIncidentList'
+          description: ''
+    post:
+      operationId: incidents_create
+      description: "\nCreate a new incident and trigger the orchestration workflow.\n\n**Orchestration
+        actions (based on severity):**\n- **SEV1/SEV2**: Creates War Room (Slack channel)
+        + LID document + Notifications\n- **SEV3/SEV4**: Creates LID document + Slack
+        notifications\n\n**Deduplication:** If an open incident already exists for
+        the same service,\nthe existing incident is returned with HTTP 200 instead
+        of creating a duplicate.\n        "
+      summary: Create a new incident
+      tags:
+      - incidents
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IncidentCreateRequest'
+            examples:
+              CreateSEV1Incident:
+                value:
+                  title: Production database outage
+                  description: Primary PostgreSQL cluster is unreachable
+                  service: 550e8400-e29b-41d4-a716-446655440000
+                  severity: SEV1
+                  impacted_scopes:
+                  - 550e8400-e29b-41d4-a716-446655440001
+                summary: Create SEV1 Incident
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/IncidentCreateRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/IncidentCreateRequest'
+        required: true
+      security:
+      - tokenAuth: []
+      - cookieAuth: []
+      - TokenAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Incident'
+          description: Incident created successfully
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Incident'
+          description: Existing open incident returned (deduplication)
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Validation error
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Permission denied - requires Responder role
+  /api/v1/incidents/{id}/:
+    get:
+      operationId: incidents_retrieve
+      description: Retrieve full details of an incident including events timeline.
+      summary: Get incident details
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - incidents
+      security:
+      - tokenAuth: []
+      - cookieAuth: []
+      - TokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncidentDetail'
+          description: ''
+    put:
+      operationId: incidents_update
+      description: Update incident fields (title, description, severity, lead, etc.)
+      summary: Update incident
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - incidents
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IncidentDetailRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/IncidentDetailRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/IncidentDetailRequest'
+        required: true
+      security:
+      - tokenAuth: []
+      - cookieAuth: []
+      - TokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncidentDetail'
+          description: ''
+    patch:
+      operationId: incidents_partial_update
+      description: Partially update specific incident fields.
+      summary: Partial update incident
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - incidents
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedIncidentDetailRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedIncidentDetailRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedIncidentDetailRequest'
+      security:
+      - tokenAuth: []
+      - cookieAuth: []
+      - TokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncidentDetail'
+          description: ''
+  /api/v1/incidents/{id}/acknowledge/:
+    post:
+      operationId: incidents_acknowledge_create
+      description: "\nTransition an incident from TRIGGERED to ACKNOWLEDGED status.\n\n**Requirements:**\n-
+        Incident must be in TRIGGERED status\n- User must have acknowledge permission
+        (Responder or Incident Lead)\n\n**Side effects:**\n- Records acknowledged_at
+        timestamp\n- Creates audit log entry\n- Sends notification to War Room (if
+        exists)\n    "
+      summary: Acknowledge incident
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - incidents
+      security:
+      - tokenAuth: []
+      - cookieAuth: []
+      - TokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Incident'
+          description: Incident acknowledged successfully
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                AlreadyAcknowledged:
+                  value:
+                    error: Cannot acknowledge incident in 'acknowledged' status
+                  summary: Already Acknowledged
+          description: Invalid status transition
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Incident not found
+  /api/v1/incidents/{id}/resolve/:
+    post:
+      operationId: incidents_resolve_create
+      description: "\nTransition an incident to RESOLVED status.\n\n**Requirements:**\n-
+        Incident must not already be resolved\n- User must have resolve permission
+        (Responder, Incident Lead, or Manager)\n\n**Side effects:**\n- Records resolved_at
+        timestamp\n- Calculates MTTR (Mean Time To Resolve)\n- Creates audit log entry\n-
+        Sends resolution notification\n- Archives War Room channel (optional)\n    "
+      summary: Resolve incident
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - incidents
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IncidentResolveRequestRequest'
+            examples:
+              ResolveWithNote:
+                value:
+                  note: 'Root cause identified: Memory leak in auth service. Fix deployed.'
+                summary: Resolve with note
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/IncidentResolveRequestRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/IncidentResolveRequestRequest'
+      security:
+      - tokenAuth: []
+      - cookieAuth: []
+      - TokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Incident'
+          description: Incident resolved successfully
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Already resolved
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Incident not found
+  /api/v1/services/:
+    get:
+      operationId: services_list
+      description: "\nRetrieve a list of all services in the catalog.\n\nServices
+        are ordered by criticality (most critical first) then by name.\n    "
+      summary: List all services
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: search
+        schema:
+          type: string
+        description: Search by service name
+      tags:
+      - services
+      security:
+      - tokenAuth: []
+      - cookieAuth: []
+      - TokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedServiceList'
+          description: ''
+  /api/v1/teams/:
+    get:
+      operationId: teams_list
+      description: "\nRetrieve a list of all teams with their on-call information.\n\nEach
+        team includes the current on-call user if configured.\n    "
+      summary: List all teams
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: search
+        schema:
+          type: string
+        description: Search by team name
+      tags:
+      - teams
+      security:
+      - tokenAuth: []
+      - cookieAuth: []
+      - TokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedTeamList'
+          description: ''
+  /api/v1/webhooks/alertmanager/:
+    post:
+      operationId: webhooks_alertmanager_create
+      description: "\nReceive alerts from Prometheus Alertmanager.\n\n**Payload format:**
+        Standard Alertmanager webhook format (v4).\n\n**Processing:**\n- Each alert
+        in the payload is processed independently\n- Severity is mapped from Alertmanager
+        labels\n- Duplicate alerts are deduplicated by service + severity\n    "
+      summary: Alertmanager webhook
+      tags:
+      - webhooks
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AlertmanagerWebhookRequestSchemaRequest'
+            examples:
+              FiringAlert:
+                value:
+                  version: '4'
+                  groupKey: '{}:{alertname="HighLatency"}'
+                  status: firing
+                  receiver: imas
+                  alerts:
+                  - status: firing
+                    labels:
+                      alertname: HighLatency
+                      severity: critical
+                      service: api-gateway
+                    annotations:
+                      summary: High latency on API Gateway
+                      description: P99 latency > 500ms for 5 minutes
+                    startsAt: '2024-01-15T10:00:00Z'
+                    generatorURL: http://prometheus:9090/graph
+                summary: Firing Alert
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AlertmanagerWebhookRequestSchemaRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AlertmanagerWebhookRequestSchemaRequest'
+        required: true
+      security:
+      - tokenAuth: []
+      - cookieAuth: []
+      - TokenAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookResponseSchema'
+          description: Alerts processed successfully
+        '400':
+          description: Invalid payload
+        '401':
+          description: Invalid webhook secret
+  /api/v1/webhooks/datadog/:
+    post:
+      operationId: webhooks_datadog_create
+      description: "\nReceive alerts from Datadog.\n\n**Configuration:** In Datadog,
+        create a webhook integration pointing to this endpoint.\n\n**Processing:**\n-
+        Alert type is mapped to severity (error=SEV1, warning=SEV2)\n- Tags are parsed
+        and added as labels\n    "
+      summary: Datadog webhook
+      tags:
+      - webhooks
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DatadogWebhookRequestSchemaRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DatadogWebhookRequestSchemaRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DatadogWebhookRequestSchemaRequest'
+        required: true
+      security:
+      - tokenAuth: []
+      - cookieAuth: []
+      - TokenAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookResponseSchema'
+          description: ''
+        '400':
+          description: Invalid payload
+  /api/v1/webhooks/grafana/:
+    post:
+      operationId: webhooks_grafana_create
+      description: "\nReceive alerts from Grafana alerting.\n\n**Supports:**\n- Grafana
+        Unified Alerting (v8+)\n- Legacy Grafana alerting\n\n**Configuration:** In
+        Grafana, add a webhook contact point with this URL.\n    "
+      summary: Grafana webhook
+      tags:
+      - webhooks
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GrafanaWebhookRequestSchemaRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/GrafanaWebhookRequestSchemaRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/GrafanaWebhookRequestSchemaRequest'
+        required: true
+      security:
+      - tokenAuth: []
+      - cookieAuth: []
+      - TokenAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookResponseSchema'
+          description: ''
+        '400':
+          description: Invalid payload
+  /api/v1/webhooks/custom/:
+    post:
+      operationId: webhooks_custom_create
+      description: "\nGeneric webhook receiver for custom integrations.\n\n**Use cases:**\n-
+        Custom monitoring tools\n- Internal alerting systems\n- Integration with unsupported
+        platforms\n\n**Payload format:** Flexible JSON format with required `alert_name`
+        field.\n    "
+      summary: Custom webhook
+      tags:
+      - webhooks
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CustomWebhookRequestSchemaRequest'
+            examples:
+              SimpleAlert:
+                value:
+                  alert_name: HighCPUUsage
+                  status: firing
+                  severity: SEV2
+                  service: web-frontend
+                  description: CPU usage above 90% for 5 minutes
+                summary: Simple Alert
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/CustomWebhookRequestSchemaRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CustomWebhookRequestSchemaRequest'
+        required: true
+      security:
+      - tokenAuth: []
+      - cookieAuth: []
+      - TokenAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookResponseSchema'
+          description: ''
+        '400':
+          description: Invalid payload
+  /api/v1/metrics/summary/:
+    get:
+      operationId: metrics_summary_retrieve
+      description: "\nGet aggregated metrics summary for incidents.\n\n**Includes:**\n-
+        Total and open incident counts\n- Incidents created/resolved today\n- Breakdown
+        by severity and status\n- Average MTTA and MTTR\n    "
+      summary: Metrics summary
+      parameters:
+      - in: query
+        name: end_date
+        schema:
+          type: string
+        description: 'End date (ISO format, default: now)'
+      - in: query
+        name: service_id
+        schema:
+          type: string
+        description: Filter by service UUID
+      - in: query
+        name: start_date
+        schema:
+          type: string
+        description: 'Start date (ISO format, default: 30 days ago)'
+      - in: query
+        name: team_id
+        schema:
+          type: string
+        description: Filter by team UUID
+      tags:
+      - metrics
+      security:
+      - tokenAuth: []
+      - cookieAuth: []
+      - TokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetricsSummarySchema'
+          description: Metrics summary
+  /api/v1/metrics/by-service/:
+    get:
+      operationId: metrics_by_service_retrieve
+      description: Get metrics grouped by service with incident counts and MTTR.
+      summary: Metrics by service
+      parameters:
+      - in: query
+        name: end_date
+        schema:
+          type: string
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Max services to return
+      - in: query
+        name: start_date
+        schema:
+          type: string
+      tags:
+      - metrics
+      security:
+      - tokenAuth: []
+      - cookieAuth: []
+      - TokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetricsByServiceResponseSchema'
+          description: ''
+  /api/v1/metrics/trend/:
+    get:
+      operationId: metrics_trend_retrieve
+      description: Get incident count trend over time.
+      summary: Incident trend
+      parameters:
+      - in: query
+        name: end_date
+        schema:
+          type: string
+      - in: query
+        name: granularity
+        schema:
+          type: string
+          enum:
+          - day
+          - week
+      - in: query
+        name: service_id
+        schema:
+          type: string
+      - in: query
+        name: start_date
+        schema:
+          type: string
+      tags:
+      - metrics
+      security:
+      - tokenAuth: []
+      - cookieAuth: []
+      - TokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetricsTrendResponseSchema'
+          description: ''
+  /api/v1/metrics/heatmap/:
+    get:
+      operationId: metrics_heatmap_retrieve
+      description: Get incident distribution by day of week and hour for pattern analysis.
+      summary: Incident heatmap
+      parameters:
+      - in: query
+        name: end_date
+        schema:
+          type: string
+      - in: query
+        name: start_date
+        schema:
+          type: string
+      tags:
+      - metrics
+      security:
+      - tokenAuth: []
+      - cookieAuth: []
+      - TokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetricsHeatmapResponseSchema'
+          description: ''
+  /api/v1/metrics/top-offenders/:
+    get:
+      operationId: metrics_top_offenders_retrieve
+      description: Get services with most high-severity incidents.
+      summary: Top offenders
+      parameters:
+      - in: query
+        name: end_date
+        schema:
+          type: string
+      - in: query
+        name: limit
+        schema:
+          type: integer
+      - in: query
+        name: start_date
+        schema:
+          type: string
+      tags:
+      - metrics
+      security:
+      - tokenAuth: []
+      - cookieAuth: []
+      - TokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetricsTopOffendersResponseSchema'
+          description: ''
+  /api/v1/metrics/export/:
+    get:
+      operationId: metrics_export_retrieve
+      description: Export incident data as CSV or JSON for external analysis.
+      summary: Export metrics
+      parameters:
+      - in: query
+        name: end_date
+        schema:
+          type: string
+      - in: query
+        name: format
+        schema:
+          type: string
+          enum:
+          - csv
+          - json
+      - in: query
+        name: service_id
+        schema:
+          type: string
+      - in: query
+        name: start_date
+        schema:
+          type: string
+      tags:
+      - metrics
+      security:
+      - tokenAuth: []
+      - cookieAuth: []
+      - TokenAuth: []
+      responses:
+        '200':
+          description: Incident data in requested format
+  /api/token/obtain/:
+    post:
+      operationId: api_token_obtain_create
+      description: "\nAuthenticate with username and password to obtain an API token.\n\nThe
+        token should be included in the `Authorization` header for subsequent requests:\n```\nAuthorization:
+        Token <your-token>\n```\n\n**Token lifespan:** Tokens do not expire automatically.
+        Use the revoke endpoint to invalidate a token.\n    "
+      summary: Obtain API token
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ObtainTokenRequest'
+            examples:
+              LoginRequest:
+                value:
+                  username: admin
+                  password: password123
+                summary: Login Request
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ObtainTokenRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ObtainTokenRequest'
+        required: true
+      security:
+      - tokenAuth: []
+      - cookieAuth: []
+      - TokenAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+              examples:
+                Success:
+                  value:
+                    token: 9944b09199c62bcf9418ad846dd0e4bbdfc6ee4b
+                    user_id: 1
+                    username: admin
+                    created: true
+          description: Authentication successful
+        '401':
+          description: Authentication failed
+  /api/token/verify/:
+    get:
+      operationId: api_token_verify_retrieve
+      description: Verify that the current authentication token is valid and return
+        user information.
+      summary: Verify token
+      tags:
+      - auth
+      security:
+      - tokenAuth: []
+      - cookieAuth: []
+      - TokenAuth: []
+      responses:
+        '200':
+          description: Token is valid
+        '401':
+          description: Invalid or missing token
+  /api/token/revoke/:
+    post:
+      operationId: api_token_revoke_create
+      description: "\nRevoke (delete) the current user's authentication token.\n\nAfter
+        calling this endpoint, the token will no longer be valid.\nUse this for logout
+        functionality or when a token might be compromised.\n    "
+      summary: Revoke token
+      tags:
+      - auth
+      security:
+      - tokenAuth: []
+      - cookieAuth: []
+      - TokenAuth: []
+      responses:
+        '200':
+          description: Token revoked successfully
+        '401':
+          description: Invalid or missing token
+  /api/token/regenerate/:
+    post:
+      operationId: api_token_regenerate_create
+      description: "\nRegenerate (rotate) the current user's authentication token.\n\nThis
+        deletes the old token and creates a new one.\nUseful for:\n- Regular security
+        rotation\n- If the current token might be compromised\n- Forcing re-authentication
+        of other sessions\n    "
+      summary: Regenerate token
+      tags:
+      - auth
+      security:
+      - tokenAuth: []
+      - cookieAuth: []
+      - TokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+          description: New token generated
+        '401':
+          description: Invalid or missing token
+components:
+  schemas:
+    AlertmanagerAlertSchemaRequest:
+      type: object
+      description: Schema for a single Alertmanager alert.
+      properties:
+        status:
+          enum:
+          - firing
+          - resolved
+          type: string
+          x-spec-enum-id: ededbb2fcabc2628
+          description: |-
+            Alert status
+
+            * `firing` - firing
+            * `resolved` - resolved
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+            minLength: 1
+          description: Alert labels (alertname, severity, etc.)
+        annotations:
+          type: object
+          additionalProperties:
+            type: string
+            minLength: 1
+          description: Alert annotations (summary, description)
+        startsAt:
+          type: string
+          format: date-time
+          description: When the alert started
+        endsAt:
+          type: string
+          format: date-time
+          description: When the alert ended (for resolved alerts)
+        generatorURL:
+          type: string
+          format: uri
+          minLength: 1
+          description: Link back to the alert source
+      required:
+      - annotations
+      - labels
+      - startsAt
+      - status
+    AlertmanagerWebhookRequestSchemaRequest:
+      type: object
+      description: Schema for Prometheus Alertmanager webhook payload.
+      properties:
+        version:
+          type: string
+          minLength: 1
+          description: Alertmanager version
+        groupKey:
+          type: string
+          minLength: 1
+          description: Alert group key
+        status:
+          enum:
+          - firing
+          - resolved
+          type: string
+          x-spec-enum-id: ededbb2fcabc2628
+          description: |-
+            Overall status of the alert group
+
+            * `firing` - firing
+            * `resolved` - resolved
+        receiver:
+          type: string
+          minLength: 1
+          description: Receiver name
+        alerts:
+          type: array
+          items:
+            $ref: '#/components/schemas/AlertmanagerAlertSchemaRequest'
+          description: List of alerts
+      required:
+      - alerts
+      - groupKey
+      - receiver
+      - status
+      - version
+    CustomWebhookRequestSchemaRequest:
+      type: object
+      description: Schema for generic/custom webhook payload.
+      properties:
+        source:
+          type: string
+          minLength: 1
+          description: Source system name
+        alert_name:
+          type: string
+          minLength: 1
+          description: Alert name
+        status:
+          enum:
+          - firing
+          - resolved
+          type: string
+          x-spec-enum-id: ededbb2fcabc2628
+          default: firing
+          description: |-
+            Alert status
+
+            * `firing` - firing
+            * `resolved` - resolved
+        severity:
+          enum:
+          - SEV1
+          - SEV2
+          - SEV3
+          - SEV4
+          - critical
+          - warning
+          - info
+          type: string
+          x-spec-enum-id: c05c9775a01af951
+          description: |-
+            Alert severity
+
+            * `SEV1` - SEV1
+            * `SEV2` - SEV2
+            * `SEV3` - SEV3
+            * `SEV4` - SEV4
+            * `critical` - critical
+            * `warning` - warning
+            * `info` - info
+        service:
+          type: string
+          minLength: 1
+          description: Service name
+        description:
+          type: string
+          minLength: 1
+          description: Alert description
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+            minLength: 1
+          description: Additional labels
+        url:
+          type: string
+          format: uri
+          minLength: 1
+          description: Link to source
+      required:
+      - alert_name
+    DatadogWebhookRequestSchemaRequest:
+      type: object
+      description: Schema for Datadog webhook payload.
+      properties:
+        id:
+          type: string
+          minLength: 1
+          description: Event ID
+        title:
+          type: string
+          minLength: 1
+          description: Event title
+        body:
+          type: string
+          minLength: 1
+          description: Event body/description
+        priority:
+          enum:
+          - normal
+          - low
+          type: string
+          x-spec-enum-id: da308849dfbe785c
+          default: normal
+          description: |-
+            Event priority
+
+            * `normal` - normal
+            * `low` - low
+        tags:
+          type: string
+          minLength: 1
+          description: Comma-separated tags
+        alert_type:
+          enum:
+          - error
+          - warning
+          - info
+          - success
+          type: string
+          x-spec-enum-id: 4ba85197fa47f870
+          description: |-
+            Alert type/severity
+
+            * `error` - error
+            * `warning` - warning
+            * `info` - info
+            * `success` - success
+        alert_status:
+          enum:
+          - Triggered
+          - Recovered
+          - Re-Triggered
+          - Warn
+          - No Data
+          type: string
+          x-spec-enum-id: 07e3ab7272782d03
+          description: |-
+            Alert status
+
+            * `Triggered` - Triggered
+            * `Recovered` - Recovered
+            * `Re-Triggered` - Re-Triggered
+            * `Warn` - Warn
+            * `No Data` - No Data
+        hostname:
+          type: string
+          minLength: 1
+          description: Source hostname
+        url:
+          type: string
+          format: uri
+          minLength: 1
+          description: Link to Datadog
+      required:
+      - alert_status
+      - alert_type
+      - id
+      - title
+    Error:
+      type: object
+      description: |-
+        Standard error response format.
+
+        Used in OpenAPI schema for error responses.
+      properties:
+        error:
+          type: string
+          description: Human-readable error message
+        code:
+          type: string
+          description: Machine-readable error code
+        details:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+          description: Field-level validation errors
+      required:
+      - error
+    GrafanaAlertSchemaRequest:
+      type: object
+      description: Schema for a single Grafana alert.
+      properties:
+        status:
+          enum:
+          - firing
+          - resolved
+          type: string
+          x-spec-enum-id: ededbb2fcabc2628
+          description: |-
+            Alert status
+
+            * `firing` - firing
+            * `resolved` - resolved
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+            minLength: 1
+          description: Alert labels
+        annotations:
+          type: object
+          additionalProperties:
+            type: string
+            minLength: 1
+          description: Alert annotations
+        startsAt:
+          type: string
+          format: date-time
+          description: When the alert started
+        endsAt:
+          type: string
+          format: date-time
+        generatorURL:
+          type: string
+          format: uri
+          minLength: 1
+        fingerprint:
+          type: string
+          minLength: 1
+          description: Alert fingerprint
+        silenceURL:
+          type: string
+          format: uri
+          minLength: 1
+        dashboardURL:
+          type: string
+          format: uri
+          minLength: 1
+        panelURL:
+          type: string
+          format: uri
+          minLength: 1
+        imageURL:
+          type: string
+          format: uri
+          minLength: 1
+      required:
+      - annotations
+      - labels
+      - startsAt
+      - status
+    GrafanaWebhookRequestSchemaRequest:
+      type: object
+      description: Schema for Grafana webhook payload.
+      properties:
+        version:
+          type: string
+          minLength: 1
+          description: Schema version
+        groupKey:
+          type: string
+          minLength: 1
+          description: Alert group key
+        orgId:
+          type: integer
+          description: Grafana organization ID
+        status:
+          enum:
+          - firing
+          - resolved
+          type: string
+          x-spec-enum-id: ededbb2fcabc2628
+          description: |-
+            Overall status
+
+            * `firing` - firing
+            * `resolved` - resolved
+        receiver:
+          type: string
+          minLength: 1
+          description: Receiver name
+        alerts:
+          type: array
+          items:
+            $ref: '#/components/schemas/GrafanaAlertSchemaRequest'
+        title:
+          type: string
+          minLength: 1
+        message:
+          type: string
+          minLength: 1
+      required:
+      - alerts
+      - groupKey
+      - orgId
+      - receiver
+      - status
+      - version
+    HeatmapDataSchema:
+      type: object
+      description: Schema for heatmap data.
+      properties:
+        hour:
+          type: integer
+          maximum: 23
+          minimum: 0
+        day:
+          type: integer
+          maximum: 6
+          minimum: 0
+          description: Day of week (0=Monday)
+        count:
+          type: integer
+      required:
+      - count
+      - day
+      - hour
+    Incident:
+      type: object
+      description: Serializer for Incident model.
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+          description: Unique identifier for the incident.
+        short_id:
+          type: string
+          readOnly: true
+        title:
+          type: string
+          description: Short descriptive title of the incident.
+          maxLength: 500
+        description:
+          type: string
+          description: Detailed description of the incident.
+        service:
+          type: string
+          format: uuid
+          description: The primary service affected by this incident.
+        service_name:
+          type: string
+          readOnly: true
+        impacted_scopes:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: Functional domains impacted (Legal, Security, PR, etc.).
+        impacted_scope_names:
+          type: array
+          items:
+            type: string
+          readOnly: true
+        lead:
+          type: integer
+          nullable: true
+          description: Person leading the incident response.
+        lead_username:
+          type: string
+          readOnly: true
+          nullable: true
+        severity:
+          enum:
+          - SEV1_CRITICAL
+          - SEV2_HIGH
+          - SEV3_MEDIUM
+          - SEV4_LOW
+          type: string
+          x-spec-enum-id: a97c6dc0b2197e08
+          description: |-
+            Severity level of the incident.
+
+            * `SEV1_CRITICAL` - SEV1 - Critical
+            * `SEV2_HIGH` - SEV2 - High
+            * `SEV3_MEDIUM` - SEV3 - Medium
+            * `SEV4_LOW` - SEV4 - Low
+        status:
+          enum:
+          - TRIGGERED
+          - ACKNOWLEDGED
+          - MITIGATED
+          - RESOLVED
+          type: string
+          x-spec-enum-id: e678a46f2d07f5ec
+          description: |-
+            Current status in the incident lifecycle.
+
+            * `TRIGGERED` - Triggered
+            * `ACKNOWLEDGED` - Acknowledged
+            * `MITIGATED` - Mitigated
+            * `RESOLVED` - Resolved
+        is_critical:
+          type: boolean
+          readOnly: true
+        is_open:
+          type: boolean
+          readOnly: true
+        lid_link:
+          type: string
+          format: uri
+          readOnly: true
+          description: Link to the Lead Incident Document (Google Doc).
+        war_room_link:
+          type: string
+          format: uri
+          readOnly: true
+          description: Link to the War Room channel (Slack/Discord).
+        detected_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the incident was detected by monitoring (from external
+            alert).
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+          description: When the incident was created in IMAS.
+        acknowledged_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+          description: When a human first acknowledged the incident.
+        resolved_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+          description: When the incident was marked as resolved.
+        mttd_seconds:
+          type: integer
+          readOnly: true
+        mtta_seconds:
+          type: integer
+          readOnly: true
+        mttr_seconds:
+          type: integer
+          readOnly: true
+      required:
+      - service
+      - title
+    IncidentCreateRequest:
+      type: object
+      description: Serializer for creating incidents via API.
+      properties:
+        title:
+          type: string
+          minLength: 1
+          description: Short descriptive title of the incident.
+          maxLength: 500
+        description:
+          type: string
+          description: Detailed description of the incident.
+        service:
+          type: string
+          format: uuid
+          description: The primary service affected by this incident.
+        service_name:
+          type: string
+          writeOnly: true
+          minLength: 1
+          description: Service name for lookup (alternative to service UUID).
+        severity:
+          enum:
+          - SEV1_CRITICAL
+          - SEV2_HIGH
+          - SEV3_MEDIUM
+          - SEV4_LOW
+          type: string
+          x-spec-enum-id: a97c6dc0b2197e08
+          description: |-
+            Severity level of the incident.
+
+            * `SEV1_CRITICAL` - SEV1 - Critical
+            * `SEV2_HIGH` - SEV2 - High
+            * `SEV3_MEDIUM` - SEV3 - Medium
+            * `SEV4_LOW` - SEV4 - Low
+        impacted_scopes:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: Functional domains impacted (Legal, Security, PR, etc.).
+        detected_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the incident was detected by monitoring (from external
+            alert).
+      required:
+      - title
+    IncidentDetail:
+      type: object
+      description: Detailed serializer for Incident including events.
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+          description: Unique identifier for the incident.
+        short_id:
+          type: string
+          readOnly: true
+        title:
+          type: string
+          description: Short descriptive title of the incident.
+          maxLength: 500
+        description:
+          type: string
+          description: Detailed description of the incident.
+        service:
+          allOf:
+          - $ref: '#/components/schemas/Service'
+          readOnly: true
+        service_name:
+          type: string
+          readOnly: true
+        impacted_scopes:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: Functional domains impacted (Legal, Security, PR, etc.).
+        impacted_scope_names:
+          type: array
+          items:
+            type: string
+          readOnly: true
+        lead:
+          type: integer
+          nullable: true
+          description: Person leading the incident response.
+        lead_username:
+          type: string
+          readOnly: true
+          nullable: true
+        severity:
+          enum:
+          - SEV1_CRITICAL
+          - SEV2_HIGH
+          - SEV3_MEDIUM
+          - SEV4_LOW
+          type: string
+          x-spec-enum-id: a97c6dc0b2197e08
+          description: |-
+            Severity level of the incident.
+
+            * `SEV1_CRITICAL` - SEV1 - Critical
+            * `SEV2_HIGH` - SEV2 - High
+            * `SEV3_MEDIUM` - SEV3 - Medium
+            * `SEV4_LOW` - SEV4 - Low
+        status:
+          enum:
+          - TRIGGERED
+          - ACKNOWLEDGED
+          - MITIGATED
+          - RESOLVED
+          type: string
+          x-spec-enum-id: e678a46f2d07f5ec
+          description: |-
+            Current status in the incident lifecycle.
+
+            * `TRIGGERED` - Triggered
+            * `ACKNOWLEDGED` - Acknowledged
+            * `MITIGATED` - Mitigated
+            * `RESOLVED` - Resolved
+        is_critical:
+          type: boolean
+          readOnly: true
+        is_open:
+          type: boolean
+          readOnly: true
+        lid_link:
+          type: string
+          format: uri
+          readOnly: true
+          description: Link to the Lead Incident Document (Google Doc).
+        war_room_link:
+          type: string
+          format: uri
+          readOnly: true
+          description: Link to the War Room channel (Slack/Discord).
+        detected_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the incident was detected by monitoring (from external
+            alert).
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+          description: When the incident was created in IMAS.
+        acknowledged_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+          description: When a human first acknowledged the incident.
+        resolved_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+          description: When the incident was marked as resolved.
+        mttd_seconds:
+          type: integer
+          readOnly: true
+        mtta_seconds:
+          type: integer
+          readOnly: true
+        mttr_seconds:
+          type: integer
+          readOnly: true
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/IncidentEvent'
+          readOnly: true
+      required:
+      - title
+    IncidentDetailRequest:
+      type: object
+      description: Detailed serializer for Incident including events.
+      properties:
+        title:
+          type: string
+          minLength: 1
+          description: Short descriptive title of the incident.
+          maxLength: 500
+        description:
+          type: string
+          description: Detailed description of the incident.
+        impacted_scopes:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: Functional domains impacted (Legal, Security, PR, etc.).
+        lead:
+          type: integer
+          nullable: true
+          description: Person leading the incident response.
+        severity:
+          enum:
+          - SEV1_CRITICAL
+          - SEV2_HIGH
+          - SEV3_MEDIUM
+          - SEV4_LOW
+          type: string
+          x-spec-enum-id: a97c6dc0b2197e08
+          description: |-
+            Severity level of the incident.
+
+            * `SEV1_CRITICAL` - SEV1 - Critical
+            * `SEV2_HIGH` - SEV2 - High
+            * `SEV3_MEDIUM` - SEV3 - Medium
+            * `SEV4_LOW` - SEV4 - Low
+        status:
+          enum:
+          - TRIGGERED
+          - ACKNOWLEDGED
+          - MITIGATED
+          - RESOLVED
+          type: string
+          x-spec-enum-id: e678a46f2d07f5ec
+          description: |-
+            Current status in the incident lifecycle.
+
+            * `TRIGGERED` - Triggered
+            * `ACKNOWLEDGED` - Acknowledged
+            * `MITIGATED` - Mitigated
+            * `RESOLVED` - Resolved
+        detected_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the incident was detected by monitoring (from external
+            alert).
+      required:
+      - title
+    IncidentEvent:
+      type: object
+      description: Serializer for IncidentEvent model.
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        type:
+          enum:
+          - STATUS_CHANGE
+          - NOTE
+          - ALERT_SENT
+          - DOCUMENT_CREATED
+          - SCOPE_ADDED
+          - WAR_ROOM_CREATED
+          - ESCALATION
+          - REMINDER
+          - ARCHIVED
+          type: string
+          x-spec-enum-id: d78c7bfea9b9ab69
+          description: |-
+            Type of event.
+
+            * `STATUS_CHANGE` - Status Change
+            * `NOTE` - Note Added
+            * `ALERT_SENT` - Alert Sent
+            * `DOCUMENT_CREATED` - Document Created
+            * `SCOPE_ADDED` - Impact Scope Added
+            * `WAR_ROOM_CREATED` - War Room Created
+            * `ESCALATION` - Escalation
+            * `REMINDER` - Reminder Sent
+            * `ARCHIVED` - Archived
+        message:
+          type: string
+          description: Description of what happened.
+        timestamp:
+          type: string
+          format: date-time
+          readOnly: true
+          description: When this event occurred.
+        created_by_username:
+          type: string
+          readOnly: true
+          nullable: true
+      required:
+      - message
+      - type
+    IncidentEventRequest:
+      type: object
+      description: Serializer for IncidentEvent model.
+      properties:
+        type:
+          enum:
+          - STATUS_CHANGE
+          - NOTE
+          - ALERT_SENT
+          - DOCUMENT_CREATED
+          - SCOPE_ADDED
+          - WAR_ROOM_CREATED
+          - ESCALATION
+          - REMINDER
+          - ARCHIVED
+          type: string
+          x-spec-enum-id: d78c7bfea9b9ab69
+          description: |-
+            Type of event.
+
+            * `STATUS_CHANGE` - Status Change
+            * `NOTE` - Note Added
+            * `ALERT_SENT` - Alert Sent
+            * `DOCUMENT_CREATED` - Document Created
+            * `SCOPE_ADDED` - Impact Scope Added
+            * `WAR_ROOM_CREATED` - War Room Created
+            * `ESCALATION` - Escalation
+            * `REMINDER` - Reminder Sent
+            * `ARCHIVED` - Archived
+        message:
+          type: string
+          minLength: 1
+          description: Description of what happened.
+      required:
+      - message
+      - type
+    IncidentResolveRequestRequest:
+      type: object
+      description: Request serializer for resolving an incident.
+      properties:
+        note:
+          type: string
+          description: Resolution note describing the fix or root cause
+    MetricsByServiceResponseSchema:
+      type: object
+      description: Schema for metrics by service response.
+      properties:
+        services:
+          type: array
+          items:
+            $ref: '#/components/schemas/ServiceMetricsSchema'
+        period_start:
+          type: string
+          format: date-time
+        period_end:
+          type: string
+          format: date-time
+      required:
+      - period_end
+      - period_start
+      - services
+    MetricsHeatmapResponseSchema:
+      type: object
+      description: Schema for incident heatmap response.
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/HeatmapDataSchema'
+        period_days:
+          type: integer
+      required:
+      - data
+      - period_days
+    MetricsSummarySchema:
+      type: object
+      description: Schema for metrics summary response.
+      properties:
+        total_incidents:
+          type: integer
+          description: Total number of incidents
+        open_incidents:
+          type: integer
+          description: Currently open incidents
+        resolved_today:
+          type: integer
+          description: Incidents resolved today
+        created_today:
+          type: integer
+          description: Incidents created today
+        by_severity:
+          type: object
+          additionalProperties:
+            type: integer
+          description: Incident count by severity level
+        by_status:
+          type: object
+          additionalProperties:
+            type: integer
+          description: Incident count by status
+        mttr_avg_hours:
+          type: number
+          format: double
+          nullable: true
+          description: Average MTTR in hours (last 30 days)
+        mtta_avg_minutes:
+          type: number
+          format: double
+          nullable: true
+          description: Average MTTA in minutes (last 30 days)
+      required:
+      - by_severity
+      - by_status
+      - created_today
+      - mtta_avg_minutes
+      - mttr_avg_hours
+      - open_incidents
+      - resolved_today
+      - total_incidents
+    MetricsTopOffendersResponseSchema:
+      type: object
+      description: Schema for top offenders response.
+      properties:
+        period:
+          type: string
+        services:
+          type: array
+          items:
+            $ref: '#/components/schemas/TopOffenderSchema'
+      required:
+      - period
+      - services
+    MetricsTrendResponseSchema:
+      type: object
+      description: Schema for metrics trend response.
+      properties:
+        period:
+          type: string
+          description: Trend period (7d, 30d, 90d)
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/TrendDataPointSchema'
+      required:
+      - data
+      - period
+    ObtainTokenRequest:
+      type: object
+      description: Serializer for token obtain request.
+      properties:
+        username:
+          type: string
+          minLength: 1
+          description: Username for authentication.
+          maxLength: 150
+        password:
+          type: string
+          writeOnly: true
+          minLength: 1
+          description: Password for authentication.
+      required:
+      - password
+      - username
+    PaginatedIncidentList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Incident'
+    PaginatedServiceList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Service'
+    PaginatedTeamList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Team'
+    PatchedIncidentDetailRequest:
+      type: object
+      description: Detailed serializer for Incident including events.
+      properties:
+        title:
+          type: string
+          minLength: 1
+          description: Short descriptive title of the incident.
+          maxLength: 500
+        description:
+          type: string
+          description: Detailed description of the incident.
+        impacted_scopes:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: Functional domains impacted (Legal, Security, PR, etc.).
+        lead:
+          type: integer
+          nullable: true
+          description: Person leading the incident response.
+        severity:
+          enum:
+          - SEV1_CRITICAL
+          - SEV2_HIGH
+          - SEV3_MEDIUM
+          - SEV4_LOW
+          type: string
+          x-spec-enum-id: a97c6dc0b2197e08
+          description: |-
+            Severity level of the incident.
+
+            * `SEV1_CRITICAL` - SEV1 - Critical
+            * `SEV2_HIGH` - SEV2 - High
+            * `SEV3_MEDIUM` - SEV3 - Medium
+            * `SEV4_LOW` - SEV4 - Low
+        status:
+          enum:
+          - TRIGGERED
+          - ACKNOWLEDGED
+          - MITIGATED
+          - RESOLVED
+          type: string
+          x-spec-enum-id: e678a46f2d07f5ec
+          description: |-
+            Current status in the incident lifecycle.
+
+            * `TRIGGERED` - Triggered
+            * `ACKNOWLEDGED` - Acknowledged
+            * `MITIGATED` - Mitigated
+            * `RESOLVED` - Resolved
+        detected_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the incident was detected by monitoring (from external
+            alert).
+    Service:
+      type: object
+      description: Serializer for Service model.
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+          description: Unique identifier for the service.
+        name:
+          type: string
+          description: Unique name of the service (used for API lookups).
+          maxLength: 255
+        owner_team:
+          type: string
+          format: uuid
+          description: The team responsible for this service.
+        owner_team_name:
+          type: string
+          readOnly: true
+        runbook_url:
+          type: string
+          format: uri
+          description: Link to the runbook/documentation for incident resolution.
+          maxLength: 200
+        criticality:
+          enum:
+          - TIER_1_CRITICAL
+          - TIER_2
+          - TIER_3
+          type: string
+          x-spec-enum-id: e2da2dfc7e24f4c4
+          description: |-
+            Criticality tier of the service.
+
+            * `TIER_1_CRITICAL` - Tier 1 - Critical
+            * `TIER_2` - Tier 2 - High
+            * `TIER_3` - Tier 3 - Standard
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - name
+      - owner_team
+    ServiceMetricsSchema:
+      type: object
+      description: Schema for per-service metrics.
+      properties:
+        service_id:
+          type: string
+          format: uuid
+        service_name:
+          type: string
+        total_incidents:
+          type: integer
+        open_incidents:
+          type: integer
+        avg_mttr_hours:
+          type: number
+          format: double
+          nullable: true
+        last_incident_at:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+      - avg_mttr_hours
+      - last_incident_at
+      - open_incidents
+      - service_id
+      - service_name
+      - total_incidents
+    ServiceRequest:
+      type: object
+      description: Serializer for Service model.
+      properties:
+        name:
+          type: string
+          minLength: 1
+          description: Unique name of the service (used for API lookups).
+          maxLength: 255
+        owner_team:
+          type: string
+          format: uuid
+          description: The team responsible for this service.
+        runbook_url:
+          type: string
+          format: uri
+          description: Link to the runbook/documentation for incident resolution.
+          maxLength: 200
+        criticality:
+          enum:
+          - TIER_1_CRITICAL
+          - TIER_2
+          - TIER_3
+          type: string
+          x-spec-enum-id: e2da2dfc7e24f4c4
+          description: |-
+            Criticality tier of the service.
+
+            * `TIER_1_CRITICAL` - Tier 1 - Critical
+            * `TIER_2` - Tier 2 - High
+            * `TIER_3` - Tier 3 - Standard
+      required:
+      - name
+      - owner_team
+    Team:
+      type: object
+      description: Serializer for Team model.
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+          description: Unique identifier for the team.
+        name:
+          type: string
+          description: Display name of the team.
+          maxLength: 255
+        slack_channel_id:
+          type: string
+          description: Slack channel ID for team notifications (e.g., C0123456789).
+          maxLength: 100
+        on_call_username:
+          type: string
+          readOnly: true
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - name
+    TokenResponse:
+      type: object
+      description: Serializer for token response.
+      properties:
+        token:
+          type: string
+          readOnly: true
+          description: 'API token for authentication. Use in header: ''Authorization:
+            Token <token>'''
+        user_id:
+          type: integer
+          readOnly: true
+          description: User ID associated with the token.
+        username:
+          type: string
+          readOnly: true
+          description: Username associated with the token.
+        created:
+          type: boolean
+          readOnly: true
+          description: Whether a new token was created.
+    TopOffenderSchema:
+      type: object
+      description: Schema for top offender service.
+      properties:
+        service_id:
+          type: string
+          format: uuid
+        service_name:
+          type: string
+        incident_count:
+          type: integer
+        sev1_count:
+          type: integer
+        sev2_count:
+          type: integer
+        total_downtime_hours:
+          type: number
+          format: double
+      required:
+      - incident_count
+      - service_id
+      - service_name
+      - sev1_count
+      - sev2_count
+      - total_downtime_hours
+    TrendDataPointSchema:
+      type: object
+      description: Schema for a single trend data point.
+      properties:
+        date:
+          type: string
+          format: date
+        count:
+          type: integer
+        severity_sev1:
+          type: integer
+          default: 0
+        severity_sev2:
+          type: integer
+          default: 0
+        severity_sev3:
+          type: integer
+          default: 0
+        severity_sev4:
+          type: integer
+          default: 0
+      required:
+      - count
+      - date
+    WebhookResponseSchema:
+      type: object
+      description: Schema for webhook response.
+      properties:
+        status:
+          type: string
+          description: Processing status
+        processed:
+          type: integer
+          description: Number of alerts processed
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/WebhookResultSchema'
+          description: Processing results
+      required:
+      - processed
+      - results
+      - status
+    WebhookResultSchema:
+      type: object
+      description: Schema for a single webhook processing result.
+      properties:
+        alert_name:
+          type: string
+        action:
+          enum:
+          - created
+          - updated
+          - deduplicated
+          - skipped
+          type: string
+          x-spec-enum-id: 4ec29fe8b5e0fb6e
+          description: |-
+            Action taken
+
+            * `created` - created
+            * `updated` - updated
+            * `deduplicated` - deduplicated
+            * `skipped` - skipped
+        incident_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Created or matched incident ID
+      required:
+      - action
+      - alert_name
+  securitySchemes:
+    TokenAuth:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: 'Token-based authentication. Format: `Token <api-token>`'
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: sessionid
+    tokenAuth:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: Token-based authentication with required prefix "Token"
+tags:
+- name: incidents
+  description: Incident lifecycle management - create, acknowledge, resolve
+  externalDocs:
+    description: Incident Management Guide
+    url: https://github.com/SeeMyPing/imas-manager/blob/main/docs/03_business_logic.md
+- name: services
+  description: Service catalog - list and manage services
+- name: teams
+  description: Team management and on-call rotation
+- name: webhooks
+  description: Webhook endpoints for receiving alerts from monitoring systems
+- name: metrics
+  description: Incident metrics, analytics, and reporting
+- name: auth
+  description: Authentication - obtain, verify, revoke API tokens
+- name: health
+  description: Health check endpoints for monitoring and load balancers
+externalDocs:
+  description: IMAS Manager Documentation
+  url: https://github.com/SeeMyPing/imas-manager

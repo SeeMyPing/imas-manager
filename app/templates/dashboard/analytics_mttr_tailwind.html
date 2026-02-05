@@ -1,0 +1,174 @@
+{% extends "dashboard/base_tailwind.html" %}
+
+{% block title %}MTTR Analytics - IMAS Manager{% endblock %}
+
+{% block page_title %}
+<i class="fa-solid fa-clock text-green-500 mr-2"></i> Analyse MTTR
+{% endblock %}
+
+{% block page_actions %}
+<a href="{% url 'dashboard:analytics' %}" class="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">
+    <i class="fa-solid fa-arrow-left"></i> Retour Analytics
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+    <div class="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-sm text-gray-500 dark:text-gray-400 uppercase tracking-wide">MTTR Moyen</p>
+                <p class="text-3xl font-bold text-green-600 dark:text-green-400 mt-2">{{ avg_mttr|default:"—" }}</p>
+            </div>
+            <div class="w-12 h-12 rounded-xl bg-green-100 dark:bg-green-900/50 flex items-center justify-center">
+                <i class="fa-solid fa-clock text-xl text-green-600 dark:text-green-400"></i>
+            </div>
+        </div>
+        <p class="text-xs text-gray-400 mt-2">Mean Time to Resolve</p>
+    </div>
+    
+    <div class="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-sm text-gray-500 dark:text-gray-400 uppercase tracking-wide">MTTR Minimum</p>
+                <p class="text-3xl font-bold text-cyan-600 dark:text-cyan-400 mt-2">{{ min_mttr|default:"—" }}</p>
+            </div>
+            <div class="w-12 h-12 rounded-xl bg-cyan-100 dark:bg-cyan-900/50 flex items-center justify-center">
+                <i class="fa-solid fa-arrow-down text-xl text-cyan-600 dark:text-cyan-400"></i>
+            </div>
+        </div>
+    </div>
+    
+    <div class="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-sm text-gray-500 dark:text-gray-400 uppercase tracking-wide">MTTR Maximum</p>
+                <p class="text-3xl font-bold text-red-600 dark:text-red-400 mt-2">{{ max_mttr|default:"—" }}</p>
+            </div>
+            <div class="w-12 h-12 rounded-xl bg-red-100 dark:bg-red-900/50 flex items-center justify-center">
+                <i class="fa-solid fa-arrow-up text-xl text-red-600 dark:text-red-400"></i>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                <i class="fa-solid fa-chart-line text-green-500"></i>
+                Évolution du MTTR
+            </h2>
+        </div>
+        <div class="p-6">
+            <canvas id="mttr-trend-chart" height="250"></canvas>
+        </div>
+    </div>
+    
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                <i class="fa-solid fa-chart-bar text-green-500"></i>
+                MTTR par Sévérité
+            </h2>
+        </div>
+        <div class="p-6">
+            <canvas id="mttr-severity-chart" height="250"></canvas>
+        </div>
+    </div>
+</div>
+
+<div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden">
+    <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+            <i class="fa-solid fa-server text-green-500"></i>
+            MTTR par Service
+        </h2>
+    </div>
+    <div class="p-6">
+        {% if mttr_by_service %}
+        <div class="space-y-4">
+            {% for item in mttr_by_service %}
+            <div>
+                <div class="flex justify-between items-center mb-1">
+                    <span class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ item.service_name }}</span>
+                    <span class="text-sm text-green-600 dark:text-green-400 font-medium">{{ item.avg_mttr }}</span>
+                </div>
+                <div class="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                    <div class="h-full bg-green-500 rounded-full" style="width: {{ item.percentage }}%"></div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-center text-gray-400 dark:text-gray-500 py-8">Aucune donnée disponible.</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const isDark = document.documentElement.classList.contains('dark');
+    const gridColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
+    const textColor = isDark ? '#9ca3af' : '#6b7280';
+    
+    Chart.defaults.color = textColor;
+    
+    const trendCtx = document.getElementById('mttr-trend-chart');
+    if (trendCtx) {
+        new Chart(trendCtx, {
+            type: 'line',
+            data: {
+                labels: {{ trend_labels|safe|default:'[]' }},
+                datasets: [{
+                    label: 'MTTR (minutes)',
+                    data: {{ trend_data|safe|default:'[]' }},
+                    borderColor: '#22c55e',
+                    backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                    fill: true,
+                    tension: 0.4
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { grid: { color: gridColor } },
+                    y: { grid: { color: gridColor }, beginAtZero: true }
+                }
+            }
+        });
+    }
+    
+    const severityCtx = document.getElementById('mttr-severity-chart');
+    if (severityCtx) {
+        new Chart(severityCtx, {
+            type: 'bar',
+            data: {
+                labels: ['Critical', 'High', 'Medium', 'Low'],
+                datasets: [{
+                    label: 'MTTR (minutes)',
+                    data: [
+                        {{ severity_critical_mttr|default:0 }},
+                        {{ severity_high_mttr|default:0 }},
+                        {{ severity_medium_mttr|default:0 }},
+                        {{ severity_low_mttr|default:0 }}
+                    ],
+                    backgroundColor: ['#dc2626', '#f97316', '#eab308', '#22d3ee']
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { grid: { display: false } },
+                    y: { grid: { color: gridColor }, beginAtZero: true }
+                }
+            }
+        });
+    }
+});
+</script>
+{% endblock %}

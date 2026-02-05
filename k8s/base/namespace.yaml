@@ -1,0 +1,10 @@
+# =============================================================================
+# IMAS Manager - Kubernetes Namespace
+# =============================================================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: imas
+  labels:
+    app.kubernetes.io/name: imas-manager
+    app.kubernetes.io/part-of: imas

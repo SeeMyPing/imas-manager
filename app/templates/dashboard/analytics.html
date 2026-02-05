@@ -1,0 +1,396 @@
+{% extends "dashboard/base.html" %}
+{% load static %}
+
+{% block title %}Analytics - IMAS Manager{% endblock %}
+
+{% block extra_css %}
+<style>
+  .kpi-card {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 12px;
+    color: white;
+    padding: 1.5rem;
+    margin-bottom: 1rem;
+  }
+
+  .kpi-card.success {
+    background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+  }
+
+  .kpi-card.warning {
+    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+  }
+
+  .kpi-card.info {
+    background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+  }
+
+  .kpi-value {
+    font-size: 2.5rem;
+    font-weight: 700;
+    margin-bottom: 0.25rem;
+  }
+
+  .kpi-label {
+    font-size: 0.875rem;
+    opacity: 0.9;
+  }
+
+  .kpi-delta {
+    font-size: 0.75rem;
+    margin-top: 0.5rem;
+  }
+
+  .kpi-delta.positive {
+    color: #4ade80;
+  }
+
+  .kpi-delta.negative {
+    color: #f87171;
+  }
+
+  .chart-container {
+    background: white;
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    margin-bottom: 1.5rem;
+  }
+
+  .chart-title {
+    font-size: 1.125rem;
+    font-weight: 600;
+    margin-bottom: 1rem;
+    color: #374151;
+  }
+
+  .offender-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid #e5e7eb;
+  }
+
+  .offender-item:last-child {
+    border-bottom: none;
+  }
+
+  .offender-name {
+    font-weight: 500;
+    color: #374151;
+  }
+
+  .offender-count {
+    background: #fee2e2;
+    color: #dc2626;
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+
+  .filter-bar {
+    background: white;
+    border-radius: 12px;
+    padding: 1rem 1.5rem;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  }
+
+  .heatmap-cell {
+    width: 30px;
+    height: 30px;
+    display: inline-block;
+    margin: 1px;
+    border-radius: 4px;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h3 mb-0">📊 Analytics & KPIs</h1>
+    <a
+      href="{% url 'api_v1:metrics_export' %}?format=csv&days={{ days }}"
+      class="btn btn-outline-primary"
+    >
+      <i class="bi bi-download"></i> Exporter CSV
+    </a>
+  </div>
+
+  <!-- Filter Bar -->
+  <div class="filter-bar">
+    <form method="get" class="row align-items-center">
+      <div class="col-auto">
+        <label class="form-label mb-0 me-2">Période :</label>
+      </div>
+      <div class="col-auto">
+        <select name="days" class="form-select" onchange="this.form.submit()">
+          {% for opt in days_options %}
+          <option
+            value="{{ opt }}"
+            {%
+            if
+            opt=""
+            ="selected_days"
+            %}selected{%
+            endif
+            %}
+          >
+            {{ opt }} derniers jours
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-auto text-muted">
+        <small
+          >{{ start_date|date:"d/m/Y" }} - {{ end_date|date:"d/m/Y" }}</small
+        >
+      </div>
+    </form>
+  </div>
+
+  <!-- KPI Cards Row -->
+  <div class="row mb-4">
+    <div class="col-md-3">
+      <div class="kpi-card">
+        <div class="kpi-value">{{ summary.total_incidents }}</div>
+        <div class="kpi-label">Incidents totaux</div>
+        {% if summary.delta_incidents %}
+        <div
+          class="kpi-delta {% if summary.delta_incidents < 0 %}positive{% else %}negative{% endif %}"
+        >
+          {% if summary.delta_incidents > 0 %}+{% endif %}{{
+          summary.delta_incidents }}% vs période précédente
+        </div>
+        {% endif %}
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="kpi-card success">
+        <div class="kpi-value">
+          {{ summary.resolution_rate|floatformat:1 }}%
+        </div>
+        <div class="kpi-label">Taux de résolution</div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="kpi-card info">
+        <div class="kpi-value">{{ summary.avg_mtta|floatformat:0 }}min</div>
+        <div class="kpi-label">MTTA moyen</div>
+        <div class="kpi-delta">
+          P90: {{ summary.p90_mtta|floatformat:0 }}min
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="kpi-card warning">
+        <div class="kpi-value">{{ summary.avg_mttr|floatformat:0 }}min</div>
+        <div class="kpi-label">MTTR moyen</div>
+        <div class="kpi-delta">
+          P90: {{ summary.p90_mttr|floatformat:0 }}min
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Charts Row -->
+  <div class="row">
+    <!-- Trend Chart -->
+    <div class="col-lg-8">
+      <div class="chart-container">
+        <h3 class="chart-title">📈 Tendance des incidents</h3>
+        <canvas id="trendChart" height="100"></canvas>
+      </div>
+    </div>
+
+    <!-- Service Breakdown -->
+    <div class="col-lg-4">
+      <div class="chart-container">
+        <h3 class="chart-title">🎯 Par service</h3>
+        <canvas id="serviceChart" height="200"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <div class="row">
+    <!-- MTTA/MTTR Trend -->
+    <div class="col-lg-8">
+      <div class="chart-container">
+        <h3 class="chart-title">⏱️ Évolution MTTA / MTTR</h3>
+        <canvas id="responseChart" height="100"></canvas>
+      </div>
+    </div>
+
+    <!-- Top Offenders -->
+    <div class="col-lg-4">
+      <div class="chart-container">
+        <h3 class="chart-title">🔥 Top alertes récurrentes</h3>
+        {% if top_offenders %} {% for offender in top_offenders %}
+        <div class="offender-item">
+          <div>
+            <div class="offender-name">{{ offender.alert_name }}</div>
+            <small class="text-muted">{{ offender.service_name }}</small>
+          </div>
+          <span class="offender-count">{{ offender.count }}x</span>
+        </div>
+        {% endfor %} {% else %}
+        <p class="text-muted text-center py-4">Aucune donnée</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Service Metrics Table -->
+  <div class="row">
+    <div class="col-12">
+      <div class="chart-container">
+        <h3 class="chart-title">📋 Métriques par service</h3>
+        <div class="table-responsive">
+          <table class="table table-hover">
+            <thead>
+              <tr>
+                <th>Service</th>
+                <th class="text-center">Incidents</th>
+                <th class="text-center">Critiques</th>
+                <th class="text-center">MTTA</th>
+                <th class="text-center">MTTR</th>
+                <th class="text-center">Taux résolution</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for svc in service_metrics %}
+              <tr>
+                <td>
+                  <strong>{{ svc.service_name }}</strong>
+                </td>
+                <td class="text-center">{{ svc.total_incidents }}</td>
+                <td class="text-center">
+                  <span class="badge bg-danger">{{ svc.critical_count }}</span>
+                </td>
+                <td class="text-center">
+                  {{ svc.avg_mtta|floatformat:0 }} min
+                </td>
+                <td class="text-center">
+                  {{ svc.avg_mttr|floatformat:0 }} min
+                </td>
+                <td class="text-center">
+                  <div class="progress" style="height: 20px">
+                    <div
+                      class="progress-bar bg-success"
+                      role="progressbar"
+                      style="width: {{ svc.resolution_rate }}%"
+                    >
+                      {{ svc.resolution_rate|floatformat:0 }}%
+                    </div>
+                  </div>
+                </td>
+              </tr>
+              {% empty %}
+              <tr>
+                <td colspan="6" class="text-center text-muted py-4">
+                  Aucune donnée pour cette période
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+  // Trend Chart
+  const trendCtx = document.getElementById('trendChart').getContext('2d');
+  new Chart(trendCtx, {
+      type: 'bar',
+      data: {
+          labels: {{ trend_labels|safe }},
+          datasets: [{
+              label: 'Incidents',
+              data: {{ trend_incidents|safe }},
+              backgroundColor: 'rgba(102, 126, 234, 0.8)',
+              borderColor: 'rgba(102, 126, 234, 1)',
+              borderWidth: 1,
+              borderRadius: 4,
+          }]
+      },
+      options: {
+          responsive: true,
+          plugins: {
+              legend: { display: false }
+          },
+          scales: {
+              y: { beginAtZero: true }
+          }
+      }
+  });
+
+  // Service Pie Chart
+  const serviceCtx = document.getElementById('serviceChart').getContext('2d');
+  new Chart(serviceCtx, {
+      type: 'doughnut',
+      data: {
+          labels: {{ service_labels|safe }},
+          datasets: [{
+              data: {{ service_counts|safe }},
+              backgroundColor: [
+                  '#667eea', '#764ba2', '#11998e', '#38ef7d',
+                  '#f093fb', '#f5576c', '#4facfe', '#00f2fe',
+                  '#fa709a', '#fee140'
+              ],
+              borderWidth: 0,
+          }]
+      },
+      options: {
+          responsive: true,
+          plugins: {
+              legend: {
+                  position: 'bottom',
+                  labels: { boxWidth: 12 }
+              }
+          }
+      }
+  });
+
+  // Response Time Chart (MTTA/MTTR)
+  const responseCtx = document.getElementById('responseChart').getContext('2d');
+  new Chart(responseCtx, {
+      type: 'line',
+      data: {
+          labels: {{ trend_labels|safe }},
+          datasets: [{
+              label: 'MTTA (min)',
+              data: {{ trend_mtta|safe }},
+              borderColor: '#4facfe',
+              backgroundColor: 'rgba(79, 172, 254, 0.1)',
+              fill: true,
+              tension: 0.4,
+          }, {
+              label: 'MTTR (min)',
+              data: {{ trend_mttr|safe }},
+              borderColor: '#f5576c',
+              backgroundColor: 'rgba(245, 87, 108, 0.1)',
+              fill: true,
+              tension: 0.4,
+          }]
+      },
+      options: {
+          responsive: true,
+          plugins: {
+              legend: { position: 'top' }
+          },
+          scales: {
+              y: { beginAtZero: true }
+          }
+      }
+  });
+</script>
+{% endblock %}

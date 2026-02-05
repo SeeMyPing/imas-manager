@@ -1,0 +1,242 @@
+{% extends "dashboard/base_tailwind.html" %}
+
+{% block title %}Analytics - IMAS Manager{% endblock %}
+
+{% block page_title %}
+<i class="fa-solid fa-chart-line text-blue-500 mr-2"></i> Analytics
+{% endblock %}
+
+{% block page_actions %}
+<div class="flex items-center gap-3">
+    <select id="period-select" class="px-4 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-200 focus:ring-2 focus:ring-blue-500">
+        <option value="7" {% if period == 7 %}selected{% endif %}>7 derniers jours</option>
+        <option value="30" {% if period == 30 %}selected{% endif %}>30 derniers jours</option>
+        <option value="90" {% if period == 90 %}selected{% endif %}>90 derniers jours</option>
+    </select>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+    <div class="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-sm text-gray-500 dark:text-gray-400 uppercase tracking-wide">Total Incidents</p>
+                <p class="text-3xl font-bold text-gray-900 dark:text-white mt-2">{{ total_incidents|default:0 }}</p>
+            </div>
+            <div class="w-12 h-12 rounded-xl bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center">
+                <i class="fa-solid fa-triangle-exclamation text-xl text-blue-600 dark:text-blue-400"></i>
+            </div>
+        </div>
+    </div>
+    
+    <div class="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-sm text-gray-500 dark:text-gray-400 uppercase tracking-wide">MTTA Moyen</p>
+                <p class="text-3xl font-bold text-orange-600 dark:text-orange-400 mt-2">{{ avg_mtta|default:"—" }}</p>
+            </div>
+            <div class="w-12 h-12 rounded-xl bg-orange-100 dark:bg-orange-900/50 flex items-center justify-center">
+                <i class="fa-solid fa-stopwatch text-xl text-orange-600 dark:text-orange-400"></i>
+            </div>
+        </div>
+        <p class="text-xs text-gray-400 mt-2">Mean Time to Acknowledge</p>
+    </div>
+    
+    <div class="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-sm text-gray-500 dark:text-gray-400 uppercase tracking-wide">MTTR Moyen</p>
+                <p class="text-3xl font-bold text-green-600 dark:text-green-400 mt-2">{{ avg_mttr|default:"—" }}</p>
+            </div>
+            <div class="w-12 h-12 rounded-xl bg-green-100 dark:bg-green-900/50 flex items-center justify-center">
+                <i class="fa-solid fa-clock text-xl text-green-600 dark:text-green-400"></i>
+            </div>
+        </div>
+        <p class="text-xs text-gray-400 mt-2">Mean Time to Resolve</p>
+    </div>
+    
+    <div class="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-sm text-gray-500 dark:text-gray-400 uppercase tracking-wide">Taux Résolution</p>
+                <p class="text-3xl font-bold text-cyan-600 dark:text-cyan-400 mt-2">{{ resolution_rate|default:0 }}%</p>
+            </div>
+            <div class="w-12 h-12 rounded-xl bg-cyan-100 dark:bg-cyan-900/50 flex items-center justify-center">
+                <i class="fa-solid fa-chart-pie text-xl text-cyan-600 dark:text-cyan-400"></i>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                <i class="fa-solid fa-chart-line text-blue-500"></i>
+                Évolution des Incidents
+            </h2>
+        </div>
+        <div class="p-6">
+            <canvas id="incidents-trend-chart" height="250"></canvas>
+        </div>
+    </div>
+    
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                <i class="fa-solid fa-chart-area text-green-500"></i>
+                MTTA & MTTR Trends
+            </h2>
+        </div>
+        <div class="p-6">
+            <canvas id="metrics-trend-chart" height="250"></canvas>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                <i class="fa-solid fa-fire text-red-500"></i>
+                Par Sévérité
+            </h2>
+        </div>
+        <div class="p-6">
+            <canvas id="severity-chart" height="250"></canvas>
+        </div>
+    </div>
+    
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                <i class="fa-solid fa-server text-purple-500"></i>
+                Top Services Impactés
+            </h2>
+        </div>
+        <div class="p-6">
+            {% if top_services %}
+            <div class="space-y-4">
+                {% for service in top_services %}
+                <div>
+                    <div class="flex justify-between items-center mb-1">
+                        <span class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ service.name }}</span>
+                        <span class="text-sm text-gray-500">{{ service.incident_count }} incidents</span>
+                    </div>
+                    <div class="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                        <div class="h-full bg-purple-500 rounded-full" style="width: {{ service.percentage }}%"></div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-center text-gray-400 dark:text-gray-500 py-8">Aucune donnée disponible.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const isDark = document.documentElement.classList.contains('dark');
+    const gridColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
+    const textColor = isDark ? '#9ca3af' : '#6b7280';
+    
+    Chart.defaults.color = textColor;
+    
+    const trendCtx = document.getElementById('incidents-trend-chart');
+    if (trendCtx) {
+        new Chart(trendCtx, {
+            type: 'line',
+            data: {
+                labels: {{ trend_labels|safe|default:'[]' }},
+                datasets: [{
+                    label: 'Incidents',
+                    data: {{ trend_data|safe|default:'[]' }},
+                    borderColor: '#3b82f6',
+                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                    fill: true,
+                    tension: 0.4
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { grid: { color: gridColor } },
+                    y: { grid: { color: gridColor }, beginAtZero: true }
+                }
+            }
+        });
+    }
+    
+    const metricsCtx = document.getElementById('metrics-trend-chart');
+    if (metricsCtx) {
+        new Chart(metricsCtx, {
+            type: 'line',
+            data: {
+                labels: {{ metrics_labels|safe|default:'[]' }},
+                datasets: [
+                    {
+                        label: 'MTTA (min)',
+                        data: {{ mtta_data|safe|default:'[]' }},
+                        borderColor: '#f97316',
+                        backgroundColor: 'transparent',
+                        tension: 0.4
+                    },
+                    {
+                        label: 'MTTR (min)',
+                        data: {{ mttr_data|safe|default:'[]' }},
+                        borderColor: '#22c55e',
+                        backgroundColor: 'transparent',
+                        tension: 0.4
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                plugins: { legend: { position: 'bottom' } },
+                scales: {
+                    x: { grid: { color: gridColor } },
+                    y: { grid: { color: gridColor }, beginAtZero: true }
+                }
+            }
+        });
+    }
+    
+    const severityCtx = document.getElementById('severity-chart');
+    if (severityCtx) {
+        new Chart(severityCtx, {
+            type: 'doughnut',
+            data: {
+                labels: ['Critical', 'High', 'Medium', 'Low'],
+                datasets: [{
+                    data: [
+                        {{ severity_critical|default:0 }},
+                        {{ severity_high|default:0 }},
+                        {{ severity_medium|default:0 }},
+                        {{ severity_low|default:0 }}
+                    ],
+                    backgroundColor: ['#dc2626', '#f97316', '#eab308', '#22d3ee'],
+                    borderWidth: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                cutout: '60%',
+                plugins: {
+                    legend: { position: 'bottom' }
+                }
+            }
+        });
+    }
+    
+    document.getElementById('period-select')?.addEventListener('change', function() {
+        window.location.href = '?period=' + this.value;
+    });
+});
+</script>
+{% endblock %}

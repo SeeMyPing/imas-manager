@@ -1,0 +1,168 @@
+{% extends "dashboard/base_tailwind.html" %}
+{% load humanize %}
+
+{% block title %}Dashboard - IMAS Manager{% endblock %}
+
+{% block page_title %}Dashboard{% endblock %}
+
+{% block page_actions %}
+<a href="{% url 'dashboard:incident_create' %}" class="inline-flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg transition-colors">
+    <i class="fa-solid fa-plus"></i> Déclarer un incident
+</a>
+{% endblock %}
+
+{% block content %}
+{% if critical_count > 0 %}
+<div class="mb-6 p-4 bg-red-600 text-white rounded-xl flex items-center gap-4 animate-pulse">
+    <i class="fa-solid fa-triangle-exclamation text-2xl"></i>
+    <div>
+        <h3 class="font-bold">{{ critical_count }} incident{{ critical_count|pluralize }} critique{{ critical_count|pluralize }} en cours</h3>
+        <p class="text-red-100 text-sm">Action immédiate requise</p>
+    </div>
+    <a href="{% url 'dashboard:incident_list' %}?severity=SEV1_CRITICAL&status=TRIGGERED" class="ml-auto px-4 py-2 bg-white text-red-600 font-medium rounded-lg hover:bg-red-50 transition-colors">Voir les incidents</a>
+</div>
+{% endif %}
+
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+    <div class="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm border-l-4 border-red-500">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-sm text-gray-500 dark:text-gray-400 uppercase tracking-wide">Incidents Actifs</p>
+                <p class="text-3xl font-bold text-gray-900 dark:text-white mt-2">{{ active_incidents_count|default:0 }}</p>
+            </div>
+            <div class="w-12 h-12 rounded-xl bg-red-100 dark:bg-red-900/50 flex items-center justify-center">
+                <i class="fa-solid fa-fire text-xl text-red-600 dark:text-red-400"></i>
+            </div>
+        </div>
+    </div>
+    
+    <div class="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm border-l-4 border-orange-500">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-sm text-gray-500 dark:text-gray-400 uppercase tracking-wide">MTTA Moyen</p>
+                <p class="text-3xl font-bold text-orange-600 dark:text-orange-400 mt-2">{{ avg_mtta|default:"—" }}</p>
+            </div>
+            <div class="w-12 h-12 rounded-xl bg-orange-100 dark:bg-orange-900/50 flex items-center justify-center">
+                <i class="fa-solid fa-stopwatch text-xl text-orange-600 dark:text-orange-400"></i>
+            </div>
+        </div>
+    </div>
+    
+    <div class="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm border-l-4 border-green-500">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-sm text-gray-500 dark:text-gray-400 uppercase tracking-wide">MTTR Moyen</p>
+                <p class="text-3xl font-bold text-green-600 dark:text-green-400 mt-2">{{ avg_mttr|default:"—" }}</p>
+            </div>
+            <div class="w-12 h-12 rounded-xl bg-green-100 dark:bg-green-900/50 flex items-center justify-center">
+                <i class="fa-solid fa-clock text-xl text-green-600 dark:text-green-400"></i>
+            </div>
+        </div>
+    </div>
+    
+    <div class="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm border-l-4 border-cyan-500">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-sm text-gray-500 dark:text-gray-400 uppercase tracking-wide">Résolus (7j)</p>
+                <p class="text-3xl font-bold text-cyan-600 dark:text-cyan-400 mt-2">{{ resolved_7d|default:0 }}</p>
+            </div>
+            <div class="w-12 h-12 rounded-xl bg-cyan-100 dark:bg-cyan-900/50 flex items-center justify-center">
+                <i class="fa-solid fa-circle-check text-xl text-cyan-600 dark:text-cyan-400"></i>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="lg:col-span-2 bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                <i class="fa-solid fa-list text-blue-500"></i> Incidents Récents
+            </h2>
+            <a href="{% url 'dashboard:incident_list' %}" class="text-sm text-blue-600 dark:text-blue-400 hover:underline">Voir tout →</a>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead class="bg-gray-50 dark:bg-gray-900/50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">ID</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Titre</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Sévérité</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Statut</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Créé</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                    {% for incident in recent_incidents %}
+                    <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer" onclick="window.location='{% url 'dashboard:incident_detail' pk=incident.pk %}'">
+                        <td class="px-6 py-4 whitespace-nowrap font-mono text-sm text-blue-600 dark:text-blue-400">{{ incident.short_id }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white max-w-xs truncate">{{ incident.title }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold uppercase {% if incident.severity == 'SEV1_CRITICAL' %}bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300{% elif incident.severity == 'SEV2_HIGH' %}bg-orange-100 text-orange-800 dark:bg-orange-900/50 dark:text-orange-300{% elif incident.severity == 'SEV3_MEDIUM' %}bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-300{% else %}bg-cyan-100 text-cyan-800 dark:bg-cyan-900/50 dark:text-cyan-300{% endif %}">{{ incident.get_severity_display }}</span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium {% if incident.status == 'TRIGGERED' %}bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300{% elif incident.status == 'ACKNOWLEDGED' %}bg-orange-100 text-orange-800 dark:bg-orange-900/50 dark:text-orange-300{% elif incident.status == 'RESOLVED' %}bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300{% else %}bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300{% endif %}">
+                                {% if incident.status == 'TRIGGERED' %}<span class="w-2 h-2 bg-current rounded-full animate-pulse"></span>{% endif %}
+                                {{ incident.get_status_display }}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{{ incident.created_at|timesince }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="5" class="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
+                            <i class="fa-solid fa-inbox text-4xl mb-3 opacity-50"></i>
+                            <p>Aucun incident récent</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                <i class="fa-solid fa-chart-pie text-purple-500"></i> Par Sévérité
+            </h2>
+        </div>
+        <div class="p-6">
+            <canvas id="severity-chart" height="250"></canvas>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const ctx = document.getElementById('severity-chart');
+    if (ctx) {
+        new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: ['Critical', 'High', 'Medium', 'Low'],
+                datasets: [{
+                    data: [
+                        {{ severity_critical|default:0 }},
+                        {{ severity_high|default:0 }},
+                        {{ severity_medium|default:0 }},
+                        {{ severity_low|default:0 }}
+                    ],
+                    backgroundColor: ['#dc2626', '#f97316', '#eab308', '#22d3ee'],
+                    borderWidth: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                cutout: '60%',
+                plugins: {
+                    legend: { position: 'bottom' }
+                }
+            }
+        });
+    }
+});
+</script>
+{% endblock %}

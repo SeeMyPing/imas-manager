@@ -1,0 +1,318 @@
+{% extends "dashboard/base.html" %}
+{% load humanize %}
+
+{% block title %}Dashboard - IMAS Manager{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+  <!-- Header -->
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+      <h1 class="h3 mb-0">Dashboard</h1>
+      <p class="text-muted mb-0">Vue d'ensemble des incidents</p>
+    </div>
+    <a href="{% url 'dashboard:incident_create' %}" class="btn btn-danger">
+      <i class="bi bi-plus-lg me-1"></i> Déclarer un incident
+    </a>
+  </div>
+
+  <!-- KPI Cards -->
+  <div class="row g-4 mb-4">
+    <div class="col-md-3">
+      <div class="card kpi-card critical shadow-sm">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center">
+            <div>
+              <h6 class="text-muted mb-1">Incidents Critiques</h6>
+              <h2
+                class="mb-0 {% if critical_count > 0 %}text-danger pulse{% endif %}"
+              >
+                {{ critical_count }}
+              </h2>
+            </div>
+            <div class="text-danger opacity-50">
+              <i
+                class="bi bi-exclamation-octagon"
+                style="font-size: 2.5rem"
+              ></i>
+            </div>
+          </div>
+          <small class="text-muted">SEV1 / SEV2 actifs</small>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-3">
+      <div class="card kpi-card warning shadow-sm">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center">
+            <div>
+              <h6 class="text-muted mb-1">Incidents Actifs</h6>
+              <h2 class="mb-0">{{ active_count }}</h2>
+            </div>
+            <div class="text-warning opacity-50">
+              <i class="bi bi-lightning-charge" style="font-size: 2.5rem"></i>
+            </div>
+          </div>
+          <small class="text-muted">Non résolus</small>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-3">
+      <div class="card kpi-card success shadow-sm">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center">
+            <div>
+              <h6 class="text-muted mb-1">Résolus (30j)</h6>
+              <h2 class="mb-0">{{ resolved_count_30d }}</h2>
+            </div>
+            <div class="text-success opacity-50">
+              <i class="bi bi-check-circle" style="font-size: 2.5rem"></i>
+            </div>
+          </div>
+          <small class="text-muted">Ce mois-ci</small>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-3">
+      <div class="card kpi-card info shadow-sm">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center">
+            <div>
+              <h6 class="text-muted mb-1">MTTR Moyen</h6>
+              <h2 class="mb-0">{{ avg_mttr_hours }}h</h2>
+            </div>
+            <div class="text-primary opacity-50">
+              <i class="bi bi-clock-history" style="font-size: 2.5rem"></i>
+            </div>
+          </div>
+          <small class="text-muted">Mean Time To Resolve</small>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-4">
+    <!-- Critical Incidents Alert -->
+    {% if critical_incidents %}
+    <div class="col-12">
+      <div class="alert alert-danger d-flex align-items-center" role="alert">
+        <i
+          class="bi bi-exclamation-triangle-fill me-2"
+          style="font-size: 1.5rem"
+        ></i>
+        <div class="flex-grow-1">
+          <strong
+            >{{ critical_count }} incident{{ critical_count|pluralize }}
+            critique{{ critical_count|pluralize }} en cours !</strong
+          >
+          {% for inc in critical_incidents|slice:":3" %}
+          <a
+            href="{% url 'dashboard:incident_detail' pk=inc.pk %}"
+            class="alert-link ms-3"
+          >
+            {{ inc.short_id }}
+          </a>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Active Incidents -->
+    <div class="col-lg-8">
+      <div class="card shadow-sm">
+        <div
+          class="card-header bg-white d-flex justify-content-between align-items-center"
+        >
+          <h5 class="mb-0">
+            <i class="bi bi-lightning-charge text-warning me-2"></i>
+            Incidents Actifs
+          </h5>
+          <a
+            href="{% url 'dashboard:incident_list' %}?status=TRIGGERED"
+            class="btn btn-sm btn-outline-secondary"
+          >
+            Voir tout
+          </a>
+        </div>
+        <div class="card-body p-0">
+          {% if active_incidents %}
+          <div class="table-responsive">
+            <table class="table table-hover mb-0">
+              <thead class="table-light">
+                <tr>
+                  <th>ID</th>
+                  <th>Titre</th>
+                  <th>Service</th>
+                  <th>Sévérité</th>
+                  <th>Statut</th>
+                  <th>Créé</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for incident in active_incidents|slice:":10" %}
+                <tr class="incident-row">
+                  <td>
+                    <a
+                      href="{% url 'dashboard:incident_detail' pk=incident.pk %}"
+                      class="text-decoration-none fw-bold"
+                    >
+                      {{ incident.short_id }}
+                    </a>
+                  </td>
+                  <td>
+                    <a
+                      href="{% url 'dashboard:incident_detail' pk=incident.pk %}"
+                      class="text-decoration-none text-dark"
+                    >
+                      {{ incident.title|truncatechars:50 }}
+                    </a>
+                  </td>
+                  <td>
+                    {% if incident.service %}
+                    <span class="badge bg-secondary"
+                      >{{ incident.service.name }}</span
+                    >
+                    {% else %}
+                    <span class="text-muted">-</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    <span
+                      class="badge severity-badge severity-{{ incident.severity|lower }}"
+                    >
+                      {{ incident.get_severity_display }}
+                    </span>
+                  </td>
+                  <td>
+                    <span class="badge status-{{ incident.status|lower }}">
+                      {{ incident.get_status_display }}
+                    </span>
+                  </td>
+                  <td>
+                    <small class="text-muted"
+                      >{{ incident.created_at|timesince }} ago</small
+                    >
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% else %}
+          <div class="text-center py-5 text-muted">
+            <i class="bi bi-check-circle" style="font-size: 3rem"></i>
+            <p class="mt-2 mb-0">Aucun incident actif 🎉</p>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Quick Stats -->
+    <div class="col-lg-4">
+      <div class="card shadow-sm mb-4">
+        <div class="card-header bg-white">
+          <h5 class="mb-0">
+            <i class="bi bi-bar-chart me-2"></i>
+            Répartition par Sévérité
+          </h5>
+        </div>
+        <div class="card-body">
+          <div class="mb-3">
+            <div class="d-flex justify-content-between mb-1">
+              <span class="text-danger">SEV1 - Critical</span>
+              <span class="fw-bold"
+                >{{ severity_stats.SEV1_CRITICAL|default:0 }}</span
+              >
+            </div>
+            <div class="progress" style="height: 8px">
+              <div
+                class="progress-bar bg-danger"
+                style="width: {% widthratio severity_stats.SEV1_CRITICAL|default:0 total_incidents_30d 100 %}%;"
+              ></div>
+            </div>
+          </div>
+          <div class="mb-3">
+            <div class="d-flex justify-content-between mb-1">
+              <span class="text-warning">SEV2 - High</span>
+              <span class="fw-bold"
+                >{{ severity_stats.SEV2_HIGH|default:0 }}</span
+              >
+            </div>
+            <div class="progress" style="height: 8px">
+              <div
+                class="progress-bar bg-warning"
+                style="width: {% widthratio severity_stats.SEV2_HIGH|default:0 total_incidents_30d 100 %}%;"
+              ></div>
+            </div>
+          </div>
+          <div class="mb-3">
+            <div class="d-flex justify-content-between mb-1">
+              <span>SEV3 - Medium</span>
+              <span class="fw-bold"
+                >{{ severity_stats.SEV3_MEDIUM|default:0 }}</span
+              >
+            </div>
+            <div class="progress" style="height: 8px">
+              <div
+                class="progress-bar"
+                style="width: {% widthratio severity_stats.SEV3_MEDIUM|default:0 total_incidents_30d 100 %}%; background-color: #ffc107;"
+              ></div>
+            </div>
+          </div>
+          <div>
+            <div class="d-flex justify-content-between mb-1">
+              <span class="text-info">SEV4 - Low</span>
+              <span class="fw-bold"
+                >{{ severity_stats.SEV4_LOW|default:0 }}</span
+              >
+            </div>
+            <div class="progress" style="height: 8px">
+              <div
+                class="progress-bar bg-info"
+                style="width: {% widthratio severity_stats.SEV4_LOW|default:0 total_incidents_30d 100 %}%;"
+              ></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick Actions -->
+      <div class="card shadow-sm">
+        <div class="card-header bg-white">
+          <h5 class="mb-0">
+            <i class="bi bi-lightning me-2"></i>
+            Actions Rapides
+          </h5>
+        </div>
+        <div class="card-body">
+          <div class="d-grid gap-2">
+            <a
+              href="{% url 'dashboard:incident_create' %}"
+              class="btn btn-danger"
+            >
+              <i class="bi bi-plus-lg me-1"></i> Nouvel Incident
+            </a>
+            <a
+              href="{% url 'dashboard:incident_list' %}"
+              class="btn btn-outline-secondary"
+            >
+              <i class="bi bi-list-ul me-1"></i> Tous les Incidents
+            </a>
+            <a
+              href="{% url 'dashboard:service_list' %}"
+              class="btn btn-outline-secondary"
+            >
+              <i class="bi bi-server me-1"></i> Catalogue Services
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

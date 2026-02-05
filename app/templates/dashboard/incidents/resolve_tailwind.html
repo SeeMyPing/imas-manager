@@ -1,0 +1,154 @@
+{% extends "dashboard/base_tailwind.html" %} {% block title %}Résoudre {{
+incident.short_id }} - IMAS Manager{% endblock %} {% block page_title %}
+<div class="flex items-center gap-3">
+  <a
+    href="{% url 'dashboard:incident_detail' pk=incident.pk %}"
+    class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+  >
+    <i class="fa-solid fa-arrow-left"></i>
+  </a>
+  Résoudre l'incident
+</div>
+{% endblock %} {% block content %}
+<div class="max-w-2xl mx-auto">
+  <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden">
+    <!-- Header -->
+    <div
+      class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-green-50 dark:bg-green-900/20"
+    >
+      <div class="flex items-center gap-3">
+        <div
+          class="w-10 h-10 rounded-full bg-green-100 dark:bg-green-900/50 flex items-center justify-center"
+        >
+          <i
+            class="fa-solid fa-circle-check text-green-600 dark:text-green-400"
+          ></i>
+        </div>
+        <div>
+          <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
+            Résolution de l'incident
+          </h2>
+          <p class="text-sm text-gray-500 dark:text-gray-400">
+            <span class="font-mono">{{ incident.short_id }}</span> - {{ incident.title|truncatechars:50 }}
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Incident Summary -->
+    <div
+      class="px-6 py-4 bg-gray-50 dark:bg-gray-700/30 border-b border-gray-200 dark:border-gray-700"
+    >
+      <div class="grid grid-cols-3 gap-4 text-center text-sm">
+        <div>
+          <p class="text-gray-500 dark:text-gray-400">Sévérité</p>
+          <span
+            class="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-bold uppercase mt-1 {% if incident.severity == 'SEV1_CRITICAL' %}bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300 {% elif incident.severity == 'SEV2_HIGH' %}bg-orange-100 text-orange-800 dark:bg-orange-900/50 dark:text-orange-300 {% elif incident.severity == 'SEV3_MEDIUM' %}bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-300 {% else %}bg-cyan-100 text-cyan-800 dark:bg-cyan-900/50 dark:text-cyan-300{% endif %}"
+          >
+            {{ incident.get_severity_display }}
+          </span>
+        </div>
+        <div>
+          <p class="text-gray-500 dark:text-gray-400">Service</p>
+          <p class="font-medium text-gray-900 dark:text-white mt-1">
+            {{ incident.service.name|default:"—" }}
+          </p>
+        </div>
+        <div>
+          <p class="text-gray-500 dark:text-gray-400">Durée</p>
+          <p class="font-medium text-gray-900 dark:text-white mt-1">
+            {{ incident.created_at|timesince }}
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <form method="post" class="p-6 space-y-6">
+      {% csrf_token %}
+
+      <!-- Resolution Summary -->
+      <div>
+        <label
+          for="id_resolution_note"
+          class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+        >
+          Résumé de la résolution
+        </label>
+        <textarea
+          name="resolution_note"
+          id="id_resolution_note"
+          rows="4"
+          placeholder="Décrivez comment l'incident a été résolu..."
+          class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-green-500 focus:border-transparent"
+        >{{ form.resolution_note.value|default:'' }}</textarea>
+        {% if form.resolution_note.errors %}
+        <p class="mt-1 text-sm text-red-600 dark:text-red-400">
+          {{ form.resolution_note.errors.0 }}
+        </p>
+        {% endif %}
+      </div>
+
+      <!-- Root Cause -->
+      <div>
+        <label
+          for="id_root_cause"
+          class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+        >
+          Cause racine
+        </label>
+        <textarea
+          name="root_cause"
+          id="id_root_cause"
+          rows="3"
+          placeholder="Quelle était la cause profonde de cet incident ?"
+          class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-green-500 focus:border-transparent"
+        >{{ form.root_cause.value|default:'' }}</textarea>
+      </div>
+
+      <!-- Confirmation Checkbox -->
+      <div
+        class="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4"
+      >
+        <label class="flex items-start gap-3 cursor-pointer">
+          <input
+            type="checkbox"
+            name="confirm"
+            required
+            class="w-5 h-5 mt-0.5 text-green-600 border-gray-300 rounded focus:ring-green-500"
+          />
+          <div>
+            <span
+              class="text-sm font-medium text-yellow-800 dark:text-yellow-200"
+            >
+              Je confirme que cet incident est résolu
+            </span>
+            <p class="text-xs text-yellow-600 dark:text-yellow-400 mt-1">
+              Vérifiez que le service est fonctionnel et que tous les systèmes
+              sont opérationnels avant de confirmer.
+            </p>
+          </div>
+        </label>
+      </div>
+
+      <!-- Actions -->
+      <div
+        class="flex items-center justify-end gap-4 pt-4 border-t border-gray-200 dark:border-gray-700"
+      >
+        <a
+          href="{% url 'dashboard:incident_detail' pk=incident.pk %}"
+          class="px-6 py-2.5 text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors"
+        >
+          Annuler
+        </a>
+        <button
+          type="submit"
+          class="inline-flex items-center gap-2 px-6 py-2.5 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition-colors"
+        >
+          <i class="fa-solid fa-circle-check"></i>
+          Marquer comme résolu
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

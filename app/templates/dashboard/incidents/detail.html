@@ -1,0 +1,310 @@
+{% extends "dashboard/base.html" %} {% block title %}{{
+incident.id|truncatechars:8 }} - IMAS Manager{% endblock %} {% block content %}
+<div class="container-fluid">
+  <!-- Breadcrumb -->
+  <nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item">
+        <a href="{% url 'dashboard:home' %}">Dashboard</a>
+      </li>
+      <li class="breadcrumb-item">
+        <a href="{% url 'dashboard:incident_list' %}">Incidents</a>
+      </li>
+      <li class="breadcrumb-item active">{{ incident.short_id }}</li>
+    </ol>
+  </nav>
+
+  <!-- Header -->
+  <div class="d-flex justify-content-between align-items-start mb-4">
+    <div>
+      <div class="d-flex align-items-center gap-2 mb-2">
+        <span
+          class="badge severity-badge severity-{{ incident.severity|lower }}"
+        >
+          {{ incident.get_severity_display }}
+        </span>
+        <span class="badge status-{{ incident.status|lower }}">
+          {{ incident.get_status_display }}
+        </span>
+        <span class="text-muted font-monospace">{{ incident.short_id }}</span>
+      </div>
+      <h1 class="h3 mb-0">{{ incident.title }}</h1>
+    </div>
+
+    <!-- Actions -->
+    <div class="d-flex gap-2">
+      {% if can_acknowledge %}
+      <form
+        method="post"
+        action="{% url 'dashboard:incident_acknowledge' pk=incident.pk %}"
+      >
+        {% csrf_token %}
+        <button type="submit" class="btn btn-warning">
+          <i class="bi bi-check-lg me-1"></i> Acquitter
+        </button>
+      </form>
+      {% endif %} {% if can_resolve %}
+      <a
+        href="{% url 'dashboard:incident_resolve' pk=incident.pk %}"
+        class="btn btn-success"
+      >
+        <i class="bi bi-check-circle me-1"></i> Résoudre
+      </a>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="row g-4">
+    <!-- Main Content -->
+    <div class="col-lg-8">
+      <!-- Description -->
+      <div class="card shadow-sm mb-4">
+        <div class="card-header bg-white">
+          <h5 class="mb-0"><i class="bi bi-file-text me-2"></i>Description</h5>
+        </div>
+        <div class="card-body">
+          {% if incident.description %}
+          <p class="mb-0" style="white-space: pre-wrap">
+            {{ incident.description }}
+          </p>
+          {% else %}
+          <p class="text-muted mb-0">Aucune description fournie.</p>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Quick Links -->
+      {% if incident.lid_link or incident.war_room_link %}
+      <div class="card shadow-sm mb-4">
+        <div class="card-header bg-white">
+          <h5 class="mb-0">
+            <i class="bi bi-link-45deg me-2"></i>Liens Rapides
+          </h5>
+        </div>
+        <div class="card-body">
+          <div class="d-flex gap-3">
+            {% if incident.lid_link %}
+            <a
+              href="{{ incident.lid_link }}"
+              target="_blank"
+              class="btn btn-outline-primary"
+            >
+              <i class="bi bi-file-earmark-text me-1"></i> Document LID
+            </a>
+            {% else %}
+            <button class="btn btn-outline-secondary" disabled>
+              <i class="bi bi-hourglass-split me-1 pulse"></i> LID en
+              création...
+            </button>
+            {% endif %} {% if incident.war_room_link %}
+            <a
+              href="{{ incident.war_room_link }}"
+              target="_blank"
+              class="btn btn-outline-success"
+            >
+              <i class="bi bi-chat-dots me-1"></i> War Room
+            </a>
+            {% elif incident.is_critical %}
+            <button class="btn btn-outline-secondary" disabled>
+              <i class="bi bi-hourglass-split me-1 pulse"></i> War Room en
+              création...
+            </button>
+            {% endif %} {% if incident.service.runbook_url %}
+            <a
+              href="{{ incident.service.runbook_url }}"
+              target="_blank"
+              class="btn btn-outline-info"
+            >
+              <i class="bi bi-book me-1"></i> Runbook
+            </a>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- Timeline -->
+      <div class="card shadow-sm mb-4">
+        <div
+          class="card-header bg-white d-flex justify-content-between align-items-center"
+        >
+          <h5 class="mb-0"><i class="bi bi-clock-history me-2"></i>Timeline</h5>
+        </div>
+        <div class="card-body">
+          <!-- Add Note Form -->
+          <form
+            method="post"
+            action="{% url 'dashboard:incident_add_note' pk=incident.pk %}"
+            class="mb-4"
+          >
+            {% csrf_token %}
+            <div class="input-group">
+              <input
+                type="text"
+                name="message"
+                class="form-control"
+                placeholder="Ajouter une note..."
+                required
+                minlength="5"
+              />
+              <button type="submit" class="btn btn-primary">
+                <i class="bi bi-send"></i>
+              </button>
+            </div>
+          </form>
+
+          <!-- Events Timeline -->
+          <div class="timeline">
+            {% for event in events %}
+            <div class="timeline-item {{ event.type|lower }}">
+              <div class="d-flex justify-content-between align-items-start">
+                <div>
+                  <strong class="text-dark">
+                    {% if event.type == 'STATUS_CHANGE' %}
+                    <i class="bi bi-arrow-repeat text-primary me-1"></i>
+                    {% elif event.type == 'NOTE' %}
+                    <i class="bi bi-chat-left-text text-muted me-1"></i>
+                    {% elif event.type == 'ALERT_SENT' %}
+                    <i class="bi bi-bell text-success me-1"></i>
+                    {% elif event.type == 'WAR_ROOM_CREATED' %}
+                    <i class="bi bi-chat-dots text-purple me-1"></i>
+                    {% elif event.type == 'DOCUMENT_CREATED' %}
+                    <i class="bi bi-file-earmark-text text-warning me-1"></i>
+                    {% else %}
+                    <i class="bi bi-dot me-1"></i>
+                    {% endif %} {{ event.get_type_display }}
+                  </strong>
+                  <p class="mb-0 mt-1">{{ event.message }}</p>
+                </div>
+                <small class="text-muted text-nowrap ms-3">
+                  {{ event.timestamp|date:"d/m H:i" }} {% if event.created_by %}
+                  <br />par {{ event.created_by.username }} {% endif %}
+                </small>
+              </div>
+            </div>
+            {% empty %}
+            <p class="text-muted text-center">Aucun événement enregistré.</p>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sidebar -->
+    <div class="col-lg-4">
+      <!-- Details Card -->
+      <div class="card shadow-sm mb-4">
+        <div class="card-header bg-white">
+          <h5 class="mb-0"><i class="bi bi-info-circle me-2"></i>Détails</h5>
+        </div>
+        <div class="card-body">
+          <dl class="row mb-0">
+            <dt class="col-5 text-muted">Service</dt>
+            <dd class="col-7">
+              {% if incident.service %}
+              <span class="badge bg-secondary"
+                >{{ incident.service.name }}</span
+              >
+              {% else %}
+              <span class="text-muted">-</span>
+              {% endif %}
+            </dd>
+
+            <dt class="col-5 text-muted">Équipe</dt>
+            <dd class="col-7">
+              {% if incident.owner_team %} {{ incident.owner_team.name }} {%
+              else %}
+              <span class="text-muted">-</span>
+              {% endif %}
+            </dd>
+
+            <dt class="col-5 text-muted">Lead</dt>
+            <dd class="col-7">
+              {% if incident.lead %}
+              <i class="bi bi-person-circle me-1"></i>{{ incident.lead.username
+              }} {% else %}
+              <span class="text-muted">Non assigné</span>
+              {% endif %}
+            </dd>
+
+            <dt class="col-5 text-muted">Créé le</dt>
+            <dd class="col-7">{{ incident.created_at|date:"d/m/Y H:i" }}</dd>
+
+            {% if incident.acknowledged_at %}
+            <dt class="col-5 text-muted">Acquitté le</dt>
+            <dd class="col-7">
+              {{ incident.acknowledged_at|date:"d/m/Y H:i" }}
+            </dd>
+            {% endif %} {% if incident.resolved_at %}
+            <dt class="col-5 text-muted">Résolu le</dt>
+            <dd class="col-7">{{ incident.resolved_at|date:"d/m/Y H:i" }}</dd>
+            {% endif %}
+          </dl>
+        </div>
+      </div>
+
+      <!-- KPIs Card -->
+      <div class="card shadow-sm mb-4">
+        <div class="card-header bg-white">
+          <h5 class="mb-0"><i class="bi bi-graph-up me-2"></i>Métriques</h5>
+        </div>
+        <div class="card-body">
+          <div class="row g-3">
+            {% if mttd_seconds %}
+            <div class="col-6">
+              <div class="border rounded p-2 text-center">
+                <small class="text-muted d-block">MTTD</small>
+                <strong>{{ mttd_seconds|floatformat:0 }}s</strong>
+              </div>
+            </div>
+            {% endif %} {% if mtta_seconds %}
+            <div class="col-6">
+              <div class="border rounded p-2 text-center">
+                <small class="text-muted d-block">MTTA</small>
+                <strong>{{ mtta_seconds|floatformat:0 }}s</strong>
+              </div>
+            </div>
+            {% endif %} {% if mttr_seconds %}
+            <div class="col-12">
+              <div class="border rounded p-2 text-center bg-light">
+                <small class="text-muted d-block">MTTR (Time To Resolve)</small>
+                <strong class="text-success">
+                  {% widthratio mttr_seconds 3600 1 %} heures
+                </strong>
+              </div>
+            </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Impacted Scopes -->
+      {% if incident.impacted_scopes.exists %}
+      <div class="card shadow-sm">
+        <div class="card-header bg-white">
+          <h5 class="mb-0">
+            <i class="bi bi-diagram-3 me-2"></i>Périmètres Impactés
+          </h5>
+        </div>
+        <div class="card-body">
+          {% for scope in incident.impacted_scopes.all %}
+          <span class="badge bg-info text-dark me-1 mb-1"
+            >{{ scope.name }}</span
+          >
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %} {% block extra_js %}
+<script>
+  // Auto-refresh if incident is active
+  {% if incident.status != 'RESOLVED' and incident.status != 'POST_MORTEM' %}
+  setTimeout(function() {
+      location.reload();
+  }, 30000);
+  {% endif %}
+</script>
+{% endblock %}

@@ -1,0 +1,130 @@
+# =============================================================================
+# IMAS Manager - Ingress Configuration
+# Exposes the application to external traffic
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: imas-ingress
+  namespace: imas
+  labels:
+    app.kubernetes.io/name: imas-manager
+  annotations:
+    # Nginx ingress controller annotations
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    # Rate limiting
+    nginx.ingress.kubernetes.io/limit-rps: "10"
+    nginx.ingress.kubernetes.io/limit-connections: "5"
+    # WebSocket support
+    nginx.ingress.kubernetes.io/proxy-http-version: "1.1"
+    nginx.ingress.kubernetes.io/upstream-hash-by: "$remote_addr"
+    # For cert-manager (optional)
+    # cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - imas.example.com
+      secretName: imas-tls
+  rules:
+    - host: imas.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: imas-web
+                port:
+                  number: 80
+          # WebSocket path
+          - path: /ws/
+            pathType: Prefix
+            backend:
+              service:
+                name: imas-web
+                port:
+                  number: 80
+
+---
+# =============================================================================
+# Service Account
+# =============================================================================
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: imas-sa
+  namespace: imas
+  labels:
+    app.kubernetes.io/name: imas-manager
+
+---
+# =============================================================================
+# Horizontal Pod Autoscaler for Web
+# =============================================================================
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: imas-web-hpa
+  namespace: imas
+  labels:
+    app.kubernetes.io/name: imas-manager
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: imas-web
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Percent
+          value: 10
+          periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+        - type: Percent
+          value: 100
+          periodSeconds: 15
+        - type: Pods
+          value: 4
+          periodSeconds: 15
+      selectPolicy: Max
+
+---
+# =============================================================================
+# Pod Disruption Budget
+# Ensures minimum availability during updates
+# =============================================================================
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: imas-web-pdb
+  namespace: imas
+  labels:
+    app.kubernetes.io/name: imas-manager
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: imas-manager
+      app.kubernetes.io/component: web

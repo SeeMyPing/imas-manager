@@ -1,0 +1,163 @@
+# =============================================================================
+# IMAS Manager - Celery Worker Deployment
+# Async task processing
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: imas-worker
+  namespace: imas
+  labels:
+    app.kubernetes.io/name: imas-manager
+    app.kubernetes.io/component: worker
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: imas-manager
+      app.kubernetes.io/component: worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: imas-manager
+        app.kubernetes.io/component: worker
+    spec:
+      serviceAccountName: imas-sa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+
+      containers:
+        - name: worker
+          image: ghcr.io/seemy-ping/imas-manager:latest
+          imagePullPolicy: Always
+          command:
+            - celery
+            - -A
+            - config
+            - worker
+            - --loglevel=info
+            - --concurrency=4
+            - --max-tasks-per-child=1000
+          
+          envFrom:
+            - configMapRef:
+                name: imas-config
+            - secretRef:
+                name: imas-secrets
+          
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+          
+          # Liveness probe using celery inspect
+          livenessProbe:
+            exec:
+              command:
+                - celery
+                - -A
+                - config
+                - inspect
+                - ping
+                - -d
+                - celery@$HOSTNAME
+            initialDelaySeconds: 60
+            periodSeconds: 60
+            timeoutSeconds: 30
+            failureThreshold: 3
+          
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      
+      volumes:
+        - name: tmp
+          emptyDir: {}
+
+---
+# =============================================================================
+# IMAS Manager - Celery Beat Deployment
+# Periodic task scheduler (single replica)
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: imas-beat
+  namespace: imas
+  labels:
+    app.kubernetes.io/name: imas-manager
+    app.kubernetes.io/component: beat
+spec:
+  replicas: 1  # Only one beat scheduler allowed
+  strategy:
+    type: Recreate  # Don't run multiple instances
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: imas-manager
+      app.kubernetes.io/component: beat
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: imas-manager
+        app.kubernetes.io/component: beat
+    spec:
+      serviceAccountName: imas-sa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+
+      containers:
+        - name: beat
+          image: ghcr.io/seemy-ping/imas-manager:latest
+          imagePullPolicy: Always
+          command:
+            - celery
+            - -A
+            - config
+            - beat
+            - --loglevel=info
+          
+          envFrom:
+            - configMapRef:
+                name: imas-config
+            - secretRef:
+                name: imas-secrets
+          
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "128Mi"
+            limits:
+              cpu: "200m"
+              memory: "256Mi"
+          
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      
+      volumes:
+        - name: tmp
+          emptyDir: {}

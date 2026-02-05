@@ -1,0 +1,314 @@
+{% load static %}
+<!doctype html>
+<html lang="fr" data-bs-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{% block title %}IMAS Manager{% endblock %}</title>
+
+    <!-- Bootstrap 5 CSS -->
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <!-- Bootstrap Icons -->
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css"
+      rel="stylesheet"
+    />
+
+    <style>
+      :root {
+        --sev1-color: #dc3545;
+        --sev2-color: #fd7e14;
+        --sev3-color: #ffc107;
+        --sev4-color: #0dcaf0;
+      }
+
+      .sidebar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        height: 100vh;
+        width: 250px;
+        background: #212529;
+        padding-top: 1rem;
+        z-index: 1000;
+      }
+
+      .sidebar .nav-link {
+        color: rgba(255, 255, 255, 0.8);
+        padding: 0.75rem 1.25rem;
+        border-radius: 0;
+      }
+
+      .sidebar .nav-link:hover,
+      .sidebar .nav-link.active {
+        background: rgba(255, 255, 255, 0.1);
+        color: #fff;
+      }
+
+      .sidebar .nav-link i {
+        margin-right: 0.75rem;
+        width: 20px;
+        text-align: center;
+      }
+
+      .main-content {
+        margin-left: 250px;
+        padding: 1.5rem;
+        min-height: 100vh;
+        background: #f8f9fa;
+      }
+
+      .severity-badge {
+        font-weight: 600;
+        text-transform: uppercase;
+      }
+
+      .severity-sev1 {
+        background-color: var(--sev1-color) !important;
+      }
+      .severity-sev2 {
+        background-color: var(--sev2-color) !important;
+      }
+      .severity-sev3 {
+        background-color: var(--sev3-color) !important;
+        color: #212529 !important;
+      }
+      .severity-sev4 {
+        background-color: var(--sev4-color) !important;
+        color: #212529 !important;
+      }
+
+      .status-triggered {
+        background-color: #dc3545 !important;
+      }
+      .status-acknowledged {
+        background-color: #fd7e14 !important;
+      }
+      .status-resolved {
+        background-color: #198754 !important;
+      }
+      .status-post_mortem {
+        background-color: #6c757d !important;
+      }
+
+      .kpi-card {
+        border-left: 4px solid;
+        transition: transform 0.2s;
+      }
+
+      .kpi-card:hover {
+        transform: translateY(-2px);
+      }
+
+      .kpi-card.critical {
+        border-left-color: var(--sev1-color);
+      }
+      .kpi-card.warning {
+        border-left-color: var(--sev3-color);
+      }
+      .kpi-card.success {
+        border-left-color: #198754;
+      }
+      .kpi-card.info {
+        border-left-color: #0d6efd;
+      }
+
+      .incident-row:hover {
+        background-color: rgba(0, 0, 0, 0.02);
+      }
+
+      .timeline {
+        position: relative;
+        padding-left: 2rem;
+      }
+
+      .timeline::before {
+        content: "";
+        position: absolute;
+        left: 0.5rem;
+        top: 0;
+        bottom: 0;
+        width: 2px;
+        background: #dee2e6;
+      }
+
+      .timeline-item {
+        position: relative;
+        padding-bottom: 1.5rem;
+      }
+
+      .timeline-item::before {
+        content: "";
+        position: absolute;
+        left: -1.5rem;
+        top: 0.25rem;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: #6c757d;
+        border: 2px solid #fff;
+      }
+
+      .timeline-item.status-change::before {
+        background: #0d6efd;
+      }
+      .timeline-item.note::before {
+        background: #6c757d;
+      }
+      .timeline-item.alert-sent::before {
+        background: #198754;
+      }
+      .timeline-item.war-room::before {
+        background: #6f42c1;
+      }
+      .timeline-item.document::before {
+        background: #fd7e14;
+      }
+
+      .logo-text {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #fff;
+        text-decoration: none;
+        display: flex;
+        align-items: center;
+        padding: 0 1.25rem 1rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        margin-bottom: 1rem;
+      }
+
+      .logo-text i {
+        color: #dc3545;
+        margin-right: 0.5rem;
+      }
+
+      .pulse {
+        animation: pulse 2s infinite;
+      }
+
+      @keyframes pulse {
+        0% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.5;
+        }
+        100% {
+          opacity: 1;
+        }
+      }
+    </style>
+    {% block extra_css %}{% endblock %}
+  </head>
+  <body>
+    <!-- Sidebar -->
+    <nav class="sidebar">
+      <a href="{% url 'dashboard:home' %}" class="logo-text">
+        <i class="bi bi-exclamation-triangle-fill"></i>
+        IMAS
+      </a>
+
+      <ul class="nav flex-column">
+        <li class="nav-item">
+          <a
+            class="nav-link {% if request.resolver_match.url_name == 'home' %}active{% endif %}"
+            href="{% url 'dashboard:home' %}"
+          >
+            <i class="bi bi-speedometer2"></i> Dashboard
+          </a>
+        </li>
+        <li class="nav-item">
+          <a
+            class="nav-link {% if 'incident' in request.resolver_match.url_name %}active{% endif %}"
+            href="{% url 'dashboard:incident_list' %}"
+          >
+            <i class="bi bi-lightning-charge"></i> Incidents
+          </a>
+        </li>
+        <li class="nav-item">
+          <a
+            class="nav-link {% if request.resolver_match.url_name == 'service_list' %}active{% endif %}"
+            href="{% url 'dashboard:service_list' %}"
+          >
+            <i class="bi bi-server"></i> Services
+          </a>
+        </li>
+        <li class="nav-item">
+          <a
+            class="nav-link {% if request.resolver_match.url_name == 'team_list' %}active{% endif %}"
+            href="{% url 'dashboard:team_list' %}"
+          >
+            <i class="bi bi-people"></i> Équipes
+          </a>
+        </li>
+      </ul>
+
+      <hr class="text-secondary mx-3" />
+
+      <ul class="nav flex-column">
+        <li class="nav-item">
+          <a class="nav-link" href="{% url 'admin:index' %}">
+            <i class="bi bi-gear"></i> Administration
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="/api/schema/swagger-ui/">
+            <i class="bi bi-code-slash"></i> API Docs
+          </a>
+        </li>
+      </ul>
+
+      <!-- User info at bottom -->
+      <div
+        class="mt-auto p-3 text-white-50"
+        style="position: absolute; bottom: 0; width: 100%"
+      >
+        <small>
+          <i class="bi bi-person-circle me-1"></i>
+          {% if user.is_authenticated %} {{ user.username }} {% else %} Non
+          connecté {% endif %}
+        </small>
+      </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Flash Messages -->
+      {% if messages %}
+      <div class="container-fluid mb-3">
+        {% for message in messages %}
+        <div
+          class="alert alert-{{ message.tags }} alert-dismissible fade show"
+          role="alert"
+        >
+          {{ message }}
+          <button
+            type="button"
+            class="btn-close"
+            data-bs-dismiss="alert"
+            aria-label="Close"
+          ></button>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %} {% block content %}{% endblock %}
+    </main>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+      // Auto-refresh for active incidents (every 30 seconds)
+      {% if auto_refresh %}
+      setTimeout(function() {
+          location.reload();
+      }, 30000);
+      {% endif %}
+    </script>
+
+    {% block extra_js %}{% endblock %}
+  </body>
+</html>

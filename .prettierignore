@@ -1,0 +1,3 @@
+# Ignorer les templates Django - Le formatter casse la syntaxe Django
+**/*.html
+app/templates/**

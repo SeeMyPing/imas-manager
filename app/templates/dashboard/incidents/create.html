@@ -1,0 +1,156 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}Nouvel Incident - IMAS Manager{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{% url 'dashboard:home' %}">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'dashboard:incident_list' %}">Incidents</a></li>
+            <li class="breadcrumb-item active">Nouveau</li>
+        </ol>
+    </nav>
+    
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="card shadow-sm">
+                <div class="card-header bg-danger text-white">
+                    <h4 class="mb-0">
+                        <i class="bi bi-exclamation-triangle me-2"></i>
+                        Déclarer un Incident
+                    </h4>
+                </div>
+                <div class="card-body">
+                    <form method="post" novalidate>
+                        {% csrf_token %}
+                        
+                        <!-- Title -->
+                        <div class="mb-4">
+                            <label for="id_title" class="form-label fw-bold">
+                                Titre de l'incident <span class="text-danger">*</span>
+                            </label>
+                            <input type="text" 
+                                   name="title" 
+                                   id="id_title"
+                                   class="form-control form-control-lg {% if form.title.errors %}is-invalid{% endif %}"
+                                   placeholder="Ex: Indisponibilité API Paiements"
+                                   value="{{ form.title.value|default:'' }}"
+                                   autofocus
+                                   required>
+                            {% if form.title.errors %}
+                            <div class="invalid-feedback">{{ form.title.errors.0 }}</div>
+                            {% endif %}
+                            <div class="form-text">Soyez précis et concis (minimum 10 caractères).</div>
+                        </div>
+                        
+                        <div class="row mb-4">
+                            <!-- Service -->
+                            <div class="col-md-6">
+                                <label for="id_service" class="form-label fw-bold">
+                                    Service impacté <span class="text-danger">*</span>
+                                </label>
+                                <select name="service" 
+                                        id="id_service" 
+                                        class="form-select {% if form.service.errors %}is-invalid{% endif %}"
+                                        required>
+                                    <option value="">-- Sélectionner un service --</option>
+                                    {% for service in services %}
+                                    <option value="{{ service.id }}" 
+                                            {% if form.service.value == service.id|stringformat:"s" %}selected{% endif %}>
+                                        {{ service.name }}
+                                        {% if service.owner_team %}({{ service.owner_team.name }}){% endif %}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                                {% if form.service.errors %}
+                                <div class="invalid-feedback">{{ form.service.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                            
+                            <!-- Severity -->
+                            <div class="col-md-6">
+                                <label for="id_severity" class="form-label fw-bold">
+                                    Sévérité <span class="text-danger">*</span>
+                                </label>
+                                <select name="severity" 
+                                        id="id_severity" 
+                                        class="form-select {% if form.severity.errors %}is-invalid{% endif %}"
+                                        required>
+                                    <option value="SEV1_CRITICAL" class="text-danger">
+                                        🔴 SEV1 - Critique (Outage total)
+                                    </option>
+                                    <option value="SEV2_HIGH" class="text-warning">
+                                        🟠 SEV2 - Haute (Dégradation majeure)
+                                    </option>
+                                    <option value="SEV3_MEDIUM" selected>
+                                        🟡 SEV3 - Moyenne (Impact limité)
+                                    </option>
+                                    <option value="SEV4_LOW" class="text-info">
+                                        🔵 SEV4 - Basse (Cosmétique)
+                                    </option>
+                                </select>
+                                {% if form.severity.errors %}
+                                <div class="invalid-feedback">{{ form.severity.errors.0 }}</div>
+                                {% endif %}
+                                <div class="form-text">
+                                    <strong>SEV1/SEV2</strong> créent automatiquement une War Room.
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Description -->
+                        <div class="mb-4">
+                            <label for="id_description" class="form-label fw-bold">Description</label>
+                            <textarea name="description" 
+                                      id="id_description"
+                                      class="form-control {% if form.description.errors %}is-invalid{% endif %}"
+                                      rows="5"
+                                      placeholder="Décrivez le problème observé, les symptômes, l'impact utilisateur...">{{ form.description.value|default:'' }}</textarea>
+                            {% if form.description.errors %}
+                            <div class="invalid-feedback">{{ form.description.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+                        
+                        <!-- Impact Scopes -->
+                        <div class="mb-4">
+                            <label class="form-label fw-bold">Périmètres impactés</label>
+                            <div class="border rounded p-3 bg-light">
+                                {{ form.impacted_scopes }}
+                            </div>
+                            <div class="form-text">
+                                Cochez si le Légal, la Sécurité ou la Communication sont concernés.
+                            </div>
+                        </div>
+                        
+                        <!-- Alert Box -->
+                        <div class="alert alert-info d-flex align-items-center mb-4">
+                            <i class="bi bi-info-circle me-2" style="font-size: 1.5rem;"></i>
+                            <div>
+                                <strong>À la création :</strong>
+                                <ul class="mb-0 ps-3">
+                                    <li>Un document LID sera automatiquement créé (Google Docs)</li>
+                                    <li>Les équipes concernées seront notifiées (Slack/Email)</li>
+                                    <li>Pour SEV1/SEV2 : une War Room Slack sera créée</li>
+                                </ul>
+                            </div>
+                        </div>
+                        
+                        <!-- Submit -->
+                        <div class="d-flex justify-content-between">
+                            <a href="{% url 'dashboard:incident_list' %}" class="btn btn-outline-secondary">
+                                <i class="bi bi-arrow-left me-1"></i> Annuler
+                            </a>
+                            <button type="submit" class="btn btn-danger btn-lg">
+                                <i class="bi bi-exclamation-triangle me-1"></i>
+                                Déclarer l'incident
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

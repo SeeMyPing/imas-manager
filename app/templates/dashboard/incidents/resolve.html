@@ -1,0 +1,110 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}Résoudre {{ incident.id|truncatechars:8 }} - IMAS Manager{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+  <!-- Breadcrumb -->
+  <nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item">
+        <a href="{% url 'dashboard:home' %}">Dashboard</a>
+      </li>
+      <li class="breadcrumb-item">
+        <a href="{% url 'dashboard:incident_list' %}">Incidents</a>
+      </li>
+      <li class="breadcrumb-item">
+        <a href="{% url 'dashboard:incident_detail' pk=incident.pk %}"
+          >{{ incident.short_id }}</a
+        >
+      </li>
+      <li class="breadcrumb-item active">Résoudre</li>
+    </ol>
+  </nav>
+
+  <div class="row justify-content-center">
+    <div class="col-lg-6">
+      <div class="card shadow-sm">
+        <div class="card-header bg-success text-white">
+          <h4 class="mb-0">
+            <i class="bi bi-check-circle me-2"></i>
+            Résoudre l'incident
+          </h4>
+        </div>
+        <div class="card-body">
+          <!-- Incident Summary -->
+          <div class="alert alert-secondary mb-4">
+            <div class="d-flex justify-content-between align-items-center">
+              <div>
+                <span
+                  class="badge severity-badge severity-{{ incident.severity|lower }} me-2"
+                >
+                  {{ incident.get_severity_display }}
+                </span>
+                <strong>{{ incident.short_id }}</strong>
+              </div>
+              <span class="badge status-{{ incident.status|lower }}">
+                {{ incident.get_status_display }}
+              </span>
+            </div>
+            <hr />
+            <p class="mb-0"><strong>{{ incident.title }}</strong></p>
+          </div>
+
+          <form method="post">
+            {% csrf_token %}
+
+            <!-- Resolution Note -->
+            <div class="mb-4">
+              <label for="id_resolution_note" class="form-label fw-bold">
+                Note de résolution
+              </label>
+              <textarea
+                name="resolution_note"
+                id="id_resolution_note"
+                class="form-control"
+                rows="5"
+                placeholder="Cause identifiée, actions correctives appliquées, recommandations pour éviter la récurrence..."
+              ></textarea>
+              <div class="form-text">
+                Cette note sera ajoutée à la timeline de l'incident.
+              </div>
+            </div>
+
+            <!-- Confirmation -->
+            <div class="mb-4">
+              <div class="form-check">
+                <input
+                  type="checkbox"
+                  name="confirm"
+                  id="id_confirm"
+                  class="form-check-input"
+                  required
+                />
+                <label for="id_confirm" class="form-check-label">
+                  Je confirme que l'incident est résolu et que le service est
+                  rétabli.
+                </label>
+              </div>
+            </div>
+
+            <!-- Submit -->
+            <div class="d-flex justify-content-between">
+              <a
+                href="{% url 'dashboard:incident_detail' pk=incident.pk %}"
+                class="btn btn-outline-secondary"
+              >
+                <i class="bi bi-arrow-left me-1"></i> Retour
+              </a>
+              <button type="submit" class="btn btn-success">
+                <i class="bi bi-check-circle me-1"></i>
+                Marquer comme résolu
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

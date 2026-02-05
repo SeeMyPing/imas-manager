@@ -1,0 +1,92 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}Services - IMAS Manager{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+  <!-- Header -->
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+      <h1 class="h3 mb-0">Catalogue des Services</h1>
+      <p class="text-muted mb-0">Services techniques monitorés</p>
+    </div>
+    <a href="{% url 'admin:core_service_add' %}" class="btn btn-primary">
+      <i class="bi bi-plus-lg me-1"></i> Ajouter un service
+    </a>
+  </div>
+
+  <!-- Services Grid -->
+  <div class="row g-4">
+    {% for service in services %}
+    <div class="col-md-6 col-lg-4">
+      <div class="card shadow-sm h-100">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-start mb-3">
+            <div>
+              <h5 class="card-title mb-1">
+                <i class="bi bi-server text-primary me-2"></i>
+                {{ service.name }}
+              </h5>
+              <small class="text-muted"
+                >{{ service.description|truncatechars:50|default:"Aucune
+                description" }}</small
+              >
+            </div>
+            {% if service.criticality %}
+            <span
+              class="badge bg-{% if service.criticality == 'CRITICAL' %}danger{% elif service.criticality == 'HIGH' %}warning{% else %}secondary{% endif %}"
+            >
+              {{ service.get_criticality_display }}
+            </span>
+            {% endif %}
+          </div>
+
+          <hr />
+
+          <dl class="row mb-0 small">
+            <dt class="col-5 text-muted">Équipe</dt>
+            <dd class="col-7">
+              {% if service.owner_team %} {{ service.owner_team.name }} {% else
+              %}
+              <span class="text-muted">-</span>
+              {% endif %}
+            </dd>
+
+            {% if service.runbook_url %}
+            <dt class="col-5 text-muted">Runbook</dt>
+            <dd class="col-7">
+              <a
+                href="{{ service.runbook_url }}"
+                target="_blank"
+                class="text-decoration-none"
+              >
+                <i class="bi bi-box-arrow-up-right"></i> Voir
+              </a>
+            </dd>
+            {% endif %}
+          </dl>
+        </div>
+        <div class="card-footer bg-white border-top-0">
+          <a
+            href="{% url 'dashboard:incident_list' %}?service={{ service.id }}"
+            class="btn btn-sm btn-outline-secondary"
+          >
+            <i class="bi bi-lightning-charge me-1"></i> Voir les incidents
+          </a>
+        </div>
+      </div>
+    </div>
+    {% empty %}
+    <div class="col-12">
+      <div class="text-center py-5 text-muted">
+        <i class="bi bi-server" style="font-size: 3rem"></i>
+        <p class="mt-2">Aucun service configuré.</p>
+        <a href="{% url 'admin:core_service_add' %}" class="btn btn-primary">
+          <i class="bi bi-plus-lg me-1"></i> Ajouter un service
+        </a>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,151 @@
+{% extends "dashboard/base_tailwind.html" %}
+{% load humanize %}
+
+{% block title %}{{ incident.short_id }} - IMAS Manager{% endblock %}
+
+{% block page_title %}
+<div class="flex items-center gap-3">
+    <a href="{% url 'dashboard:incident_list' %}" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"><i class="fa-solid fa-arrow-left"></i></a>
+    <span class="font-mono text-blue-600 dark:text-blue-400">{{ incident.short_id }}</span>
+</div>
+{% endblock %}
+
+{% block page_actions %}
+<div class="flex items-center gap-3">
+    {% if can_acknowledge %}
+    <form method="post" action="{% url 'dashboard:incident_acknowledge' pk=incident.pk %}">
+        {% csrf_token %}
+        <button type="submit" class="inline-flex items-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white font-medium rounded-lg transition-colors"><i class="fa-solid fa-check"></i> Acquitter</button>
+    </form>
+    {% endif %}
+    {% if can_resolve %}
+    <a href="{% url 'dashboard:incident_resolve' pk=incident.pk %}" class="inline-flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition-colors"><i class="fa-solid fa-circle-check"></i> Résoudre</a>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 mb-6">
+    <div class="flex flex-wrap items-start justify-between gap-4">
+        <div>
+            <div class="flex flex-wrap items-center gap-2 mb-3">
+                <span class="inline-flex items-center px-3 py-1 rounded-lg text-sm font-bold uppercase {% if incident.severity == 'SEV1_CRITICAL' %}bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300{% elif incident.severity == 'SEV2_HIGH' %}bg-orange-100 text-orange-800 dark:bg-orange-900/50 dark:text-orange-300{% elif incident.severity == 'SEV3_MEDIUM' %}bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-300{% else %}bg-cyan-100 text-cyan-800 dark:bg-cyan-900/50 dark:text-cyan-300{% endif %}">{{ incident.get_severity_display }}</span>
+                <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-sm font-medium {% if incident.status == 'TRIGGERED' %}bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300{% elif incident.status == 'ACKNOWLEDGED' %}bg-orange-100 text-orange-800 dark:bg-orange-900/50 dark:text-orange-300{% elif incident.status == 'RESOLVED' %}bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300{% else %}bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300{% endif %}">{% if incident.status == 'TRIGGERED' %}<span class="w-2 h-2 bg-current rounded-full animate-pulse"></span>{% endif %} {{ incident.get_status_display }}</span>
+            </div>
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-white mb-2">{{ incident.title }}</h1>
+            <p class="text-sm text-gray-500 dark:text-gray-400">Créé {{ incident.created_at|timesince }} par {{ incident.lead.username|default:"Système" }}</p>
+        </div>
+        <div class="flex flex-wrap gap-2">
+            {% if incident.lid_link %}
+            <a href="{{ incident.lid_link }}" target="_blank" class="inline-flex items-center gap-2 px-4 py-2 bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300 rounded-lg hover:bg-orange-100 dark:hover:bg-orange-900/40 transition-colors"><i class="fa-solid fa-file-lines"></i> Document LID</a>
+            {% endif %}
+            {% if incident.war_room_link %}
+            <a href="{{ incident.war_room_link }}" target="_blank" class="inline-flex items-center gap-2 px-4 py-2 bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300 rounded-lg hover:bg-purple-100 dark:hover:bg-purple-900/40 transition-colors"><i class="fa-brands fa-slack"></i> War Room</a>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="lg:col-span-2 space-y-6">
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden">
+            <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+                <h2 class="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2"><i class="fa-solid fa-align-left text-gray-400"></i> Description</h2>
+            </div>
+            <div class="p-6">
+                {% if incident.description %}
+                <p class="text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{{ incident.description }}</p>
+                {% else %}
+                <p class="text-gray-400 dark:text-gray-500 italic">Aucune description fournie.</p>
+                {% endif %}
+            </div>
+        </div>
+        
+        <div class="grid grid-cols-3 gap-4">
+            <div class="bg-white dark:bg-gray-800 rounded-xl p-4 text-center">
+                <p class="text-xs text-gray-500 dark:text-gray-400 uppercase mb-1">MTTD</p>
+                <p class="text-2xl font-bold text-gray-900 dark:text-white">{% if mttd_seconds %}{{ mttd_seconds|floatformat:0 }}s{% else %}—{% endif %}</p>
+            </div>
+            <div class="bg-white dark:bg-gray-800 rounded-xl p-4 text-center">
+                <p class="text-xs text-gray-500 dark:text-gray-400 uppercase mb-1">MTTA</p>
+                <p class="text-2xl font-bold {% if mtta_seconds %}text-orange-600 dark:text-orange-400{% else %}text-gray-900 dark:text-white{% endif %}">{% if mtta_seconds %}{{ mtta_seconds|floatformat:0 }}s{% else %}—{% endif %}</p>
+            </div>
+            <div class="bg-white dark:bg-gray-800 rounded-xl p-4 text-center">
+                <p class="text-xs text-gray-500 dark:text-gray-400 uppercase mb-1">MTTR</p>
+                <p class="text-2xl font-bold {% if mttr_seconds %}text-green-600 dark:text-green-400{% else %}text-gray-900 dark:text-white{% endif %}">{% if mttr_seconds %}{{ mttr_seconds|floatformat:0 }}s{% else %}—{% endif %}</p>
+            </div>
+        </div>
+        
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden">
+            <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+                <h2 class="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2"><i class="fa-solid fa-clock-rotate-left text-gray-400"></i> Timeline</h2>
+            </div>
+            <div class="p-6">
+                <form method="post" action="{% url 'dashboard:incident_add_note' pk=incident.pk %}" class="mb-6">
+                    {% csrf_token %}
+                    <div class="flex gap-2">
+                        <input type="text" name="message" placeholder="Ajouter une note..." required minlength="5" class="flex-1 px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                        <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"><i class="fa-solid fa-paper-plane"></i></button>
+                    </div>
+                </form>
+                <div class="space-y-4">
+                    {% for event in events %}
+                    <div class="flex items-start gap-4 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                        <div class="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 {% if event.type == 'STATUS_CHANGE' %}bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400{% elif event.type == 'NOTE' %}bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400{% elif event.type == 'ALERT_SENT' %}bg-green-100 dark:bg-green-900/50 text-green-600 dark:text-green-400{% elif event.type == 'WAR_ROOM_CREATED' %}bg-purple-100 dark:bg-purple-900/50 text-purple-600 dark:text-purple-400{% elif event.type == 'DOCUMENT_CREATED' %}bg-orange-100 dark:bg-orange-900/50 text-orange-600 dark:text-orange-400{% elif event.type == 'ESCALATION' %}bg-red-100 dark:bg-red-900/50 text-red-600 dark:text-red-400{% else %}bg-gray-100 dark:bg-gray-700 text-gray-500{% endif %}">
+                            {% if event.type == 'STATUS_CHANGE' %}<i class="fa-solid fa-arrows-rotate text-sm"></i>{% elif event.type == 'NOTE' %}<i class="fa-solid fa-comment text-sm"></i>{% elif event.type == 'ALERT_SENT' %}<i class="fa-solid fa-bell text-sm"></i>{% elif event.type == 'WAR_ROOM_CREATED' %}<i class="fa-brands fa-slack text-sm"></i>{% elif event.type == 'DOCUMENT_CREATED' %}<i class="fa-solid fa-file-lines text-sm"></i>{% elif event.type == 'ESCALATION' %}<i class="fa-solid fa-arrow-up text-sm"></i>{% else %}<i class="fa-solid fa-circle text-xs"></i>{% endif %}
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center justify-between gap-2 mb-1">
+                                <span class="text-sm font-medium text-gray-900 dark:text-white">{{ event.get_type_display }}</span>
+                                <span class="text-xs text-gray-400">{{ event.timestamp|date:"d/m H:i" }}</span>
+                            </div>
+                            <p class="text-sm text-gray-600 dark:text-gray-400">{{ event.message }}</p>
+                            {% if event.created_by %}
+                            <p class="text-xs text-gray-400 mt-1">par {{ event.created_by.username }}</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% empty %}
+                    <p class="text-center text-gray-400 dark:text-gray-500 py-8">Aucun événement enregistré.</p>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="space-y-6">
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden">
+            <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+                <h3 class="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2"><i class="fa-solid fa-info-circle text-gray-400"></i> Détails</h3>
+            </div>
+            <div class="p-6 space-y-4">
+                <div class="flex justify-between"><span class="text-sm text-gray-500 dark:text-gray-400">Service</span><span class="text-sm font-medium text-gray-900 dark:text-white">{% if incident.service %}{{ incident.service.name }}{% else %}—{% endif %}</span></div>
+                <div class="flex justify-between"><span class="text-sm text-gray-500 dark:text-gray-400">Équipe</span><span class="text-sm font-medium text-gray-900 dark:text-white">{% if incident.service.owner_team %}{{ incident.service.owner_team.name }}{% else %}—{% endif %}</span></div>
+                <div class="flex justify-between"><span class="text-sm text-gray-500 dark:text-gray-400">Lead</span><span class="text-sm font-medium text-gray-900 dark:text-white">{% if incident.lead %}{{ incident.lead.username }}{% else %}—{% endif %}</span></div>
+                <hr class="border-gray-200 dark:border-gray-700">
+                <div class="flex justify-between"><span class="text-sm text-gray-500 dark:text-gray-400">Créé</span><span class="text-sm text-gray-900 dark:text-white">{{ incident.created_at|date:"d/m/Y H:i" }}</span></div>
+                {% if incident.acknowledged_at %}
+                <div class="flex justify-between"><span class="text-sm text-gray-500 dark:text-gray-400">Acquitté</span><span class="text-sm text-gray-900 dark:text-white">{{ incident.acknowledged_at|date:"d/m/Y H:i" }}</span></div>
+                {% endif %}
+                {% if incident.resolved_at %}
+                <div class="flex justify-between"><span class="text-sm text-gray-500 dark:text-gray-400">Résolu</span><span class="text-sm text-gray-900 dark:text-white">{{ incident.resolved_at|date:"d/m/Y H:i" }}</span></div>
+                {% endif %}
+            </div>
+        </div>
+        {% if incident.impacted_scopes.exists %}
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden">
+            <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+                <h3 class="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2"><i class="fa-solid fa-shield-halved text-gray-400"></i> Impacts</h3>
+            </div>
+            <div class="p-6">
+                <div class="flex flex-wrap gap-2">
+                    {% for scope in incident.impacted_scopes.all %}
+                    <span class="inline-flex items-center px-3 py-1 rounded-lg text-sm font-medium bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300">{{ scope.name }}</span>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

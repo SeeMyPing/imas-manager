@@ -1,0 +1,90 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}Équipes - IMAS Manager{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+  <!-- Header -->
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+      <h1 class="h3 mb-0">Équipes</h1>
+      <p class="text-muted mb-0">
+        Équipes techniques responsables des services
+      </p>
+    </div>
+    <a href="{% url 'admin:core_team_add' %}" class="btn btn-primary">
+      <i class="bi bi-plus-lg me-1"></i> Ajouter une équipe
+    </a>
+  </div>
+
+  <!-- Teams Grid -->
+  <div class="row g-4">
+    {% for team in teams %}
+    <div class="col-md-6 col-lg-4">
+      <div class="card shadow-sm h-100">
+        <div class="card-body">
+          <div class="d-flex align-items-center mb-3">
+            <div class="bg-primary bg-opacity-10 rounded-circle p-3 me-3">
+              <i
+                class="bi bi-people text-primary"
+                style="font-size: 1.5rem"
+              ></i>
+            </div>
+            <div>
+              <h5 class="card-title mb-0">{{ team.name }}</h5>
+              <small class="text-muted">{{ team.slug }}</small>
+            </div>
+          </div>
+
+          {% if team.description %}
+          <p class="text-muted small mb-3">
+            {{ team.description|truncatechars:100 }}
+          </p>
+          {% endif %}
+
+          <hr />
+
+          <dl class="row mb-0 small">
+            {% if team.slack_channel %}
+            <dt class="col-5 text-muted">Slack</dt>
+            <dd class="col-7">
+              <code>{{ team.slack_channel }}</code>
+            </dd>
+            {% endif %} {% if team.email %}
+            <dt class="col-5 text-muted">Email</dt>
+            <dd class="col-7">
+              <a href="mailto:{{ team.email }}">{{ team.email }}</a>
+            </dd>
+            {% endif %} {% if team.current_on_call %}
+            <dt class="col-5 text-muted">On-Call</dt>
+            <dd class="col-7">
+              <i class="bi bi-person-badge text-warning me-1"></i>
+              {{ team.current_on_call.username }}
+            </dd>
+            {% endif %}
+          </dl>
+        </div>
+        <div class="card-footer bg-white border-top-0">
+          <a
+            href="{% url 'admin:core_team_change' team.pk %}"
+            class="btn btn-sm btn-outline-secondary"
+          >
+            <i class="bi bi-pencil me-1"></i> Modifier
+          </a>
+        </div>
+      </div>
+    </div>
+    {% empty %}
+    <div class="col-12">
+      <div class="text-center py-5 text-muted">
+        <i class="bi bi-people" style="font-size: 3rem"></i>
+        <p class="mt-2">Aucune équipe configurée.</p>
+        <a href="{% url 'admin:core_team_add' %}" class="btn btn-primary">
+          <i class="bi bi-plus-lg me-1"></i> Ajouter une équipe
+        </a>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

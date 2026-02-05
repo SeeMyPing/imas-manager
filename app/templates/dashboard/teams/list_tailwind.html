@@ -1,0 +1,107 @@
+{% extends "dashboard/base_tailwind.html" %}
+
+{% block title %}Équipes - IMAS Manager{% endblock %}
+
+{% block page_title %}
+<i class="fa-solid fa-users text-blue-500 mr-2"></i> Équipes
+{% endblock %}
+
+{% block page_actions %}
+<div class="relative">
+    <input type="text" id="team-search" placeholder="Rechercher une équipe..." class="w-64 pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+    <i class="fa-solid fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm mb-6 p-4">
+    <div class="flex items-center gap-4 text-sm">
+        <span class="text-gray-500 dark:text-gray-400">{{ object_list|length }} équipes</span>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="teams-grid">
+    {% for team in object_list %}
+    <div class="team-card bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden hover:shadow-lg transition-shadow" data-name="{{ team.name|lower }}">
+        <div class="p-6">
+            <div class="flex items-start gap-4 mb-4">
+                <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-lg font-bold">
+                    {{ team.name|slice:":2"|upper }}
+                </div>
+                <div class="flex-1 min-w-0">
+                    <h3 class="font-semibold text-gray-900 dark:text-white truncate">{{ team.name }}</h3>
+                    {% if team.slack_channel %}
+                    <a href="{{ team.slack_channel }}" target="_blank" class="inline-flex items-center gap-1 text-sm text-purple-600 dark:text-purple-400 hover:underline">
+                        <i class="fa-brands fa-slack"></i> Slack
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+            
+            {% if team.description %}
+            <p class="text-sm text-gray-500 dark:text-gray-400 mb-4 line-clamp-2">{{ team.description }}</p>
+            {% endif %}
+            
+            <div class="space-y-3">
+                <div class="flex items-center gap-3 text-sm">
+                    <div class="w-8 h-8 rounded-full bg-orange-100 dark:bg-orange-900/50 flex items-center justify-center">
+                        <i class="fa-solid fa-user-tie text-orange-600 dark:text-orange-400 text-xs"></i>
+                    </div>
+                    <div>
+                        <p class="text-xs text-gray-400 dark:text-gray-500">Manager</p>
+                        <p class="text-gray-900 dark:text-white font-medium">{% if team.manager %}{{ team.manager.username }}{% else %}—{% endif %}</p>
+                    </div>
+                </div>
+                
+                <div class="flex items-center gap-3 text-sm">
+                    <div class="w-8 h-8 rounded-full bg-cyan-100 dark:bg-cyan-900/50 flex items-center justify-center">
+                        <i class="fa-solid fa-phone text-cyan-600 dark:text-cyan-400 text-xs"></i>
+                    </div>
+                    <div>
+                        <p class="text-xs text-gray-400 dark:text-gray-500">Escalade</p>
+                        <p class="text-gray-900 dark:text-white font-medium">{% if team.escalation_email %}{{ team.escalation_email }}{% else %}—{% endif %}</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="mt-4 pt-4 border-t border-gray-100 dark:border-gray-700">
+                <div class="flex items-center justify-between text-sm">
+                    <div class="flex items-center gap-2 text-gray-500 dark:text-gray-400">
+                        <i class="fa-solid fa-server"></i>
+                        <span>{{ team.services_count|default:0 }} services</span>
+                    </div>
+                    <div class="flex items-center gap-2 text-gray-500 dark:text-gray-400">
+                        <i class="fa-solid fa-users"></i>
+                        <span>{{ team.members_count|default:0 }} membres</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% empty %}
+    <div class="col-span-full">
+        <div class="text-center py-12">
+            <i class="fa-solid fa-users text-4xl text-gray-300 dark:text-gray-600 mb-4"></i>
+            <p class="text-gray-500 dark:text-gray-400">Aucune équipe configurée.</p>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const searchInput = document.getElementById('team-search');
+    const cards = document.querySelectorAll('.team-card');
+    
+    searchInput?.addEventListener('input', function() {
+        const searchTerm = this.value.toLowerCase();
+        cards.forEach(card => {
+            const name = card.dataset.name;
+            card.style.display = name.includes(searchTerm) ? 'block' : 'none';
+        });
+    });
+});
+</script>
+{% endblock %}

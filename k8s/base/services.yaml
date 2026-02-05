@@ -1,0 +1,171 @@
+# =============================================================================
+# IMAS Manager - Database Service (External or In-Cluster)
+# =============================================================================
+# Option 1: External Database Service (for managed DB like RDS, Cloud SQL)
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: imas
+  labels:
+    app.kubernetes.io/name: imas-manager
+    app.kubernetes.io/component: database
+spec:
+  type: ExternalName
+  externalName: your-db-host.example.com  # Replace with your DB endpoint
+
+---
+# Option 2: In-Cluster PostgreSQL (for development/testing)
+# Uncomment below for in-cluster PostgreSQL
+# ---
+# apiVersion: apps/v1
+# kind: StatefulSet
+# metadata:
+#   name: postgres
+#   namespace: imas
+# spec:
+#   serviceName: postgres
+#   replicas: 1
+#   selector:
+#     matchLabels:
+#       app.kubernetes.io/name: imas-manager
+#       app.kubernetes.io/component: database
+#   template:
+#     metadata:
+#       labels:
+#         app.kubernetes.io/name: imas-manager
+#         app.kubernetes.io/component: database
+#     spec:
+#       containers:
+#         - name: postgres
+#           image: postgres:16-alpine
+#           ports:
+#             - containerPort: 5432
+#           env:
+#             - name: POSTGRES_DB
+#               value: imas
+#             - name: POSTGRES_USER
+#               valueFrom:
+#                 secretKeyRef:
+#                   name: imas-secrets
+#                   key: POSTGRES_USER
+#             - name: POSTGRES_PASSWORD
+#               valueFrom:
+#                 secretKeyRef:
+#                   name: imas-secrets
+#                   key: POSTGRES_PASSWORD
+#           volumeMounts:
+#             - name: postgres-data
+#               mountPath: /var/lib/postgresql/data
+#           resources:
+#             requests:
+#               cpu: 250m
+#               memory: 512Mi
+#             limits:
+#               cpu: 1000m
+#               memory: 1Gi
+#   volumeClaimTemplates:
+#     - metadata:
+#         name: postgres-data
+#       spec:
+#         accessModes: ["ReadWriteOnce"]
+#         resources:
+#           requests:
+#             storage: 20Gi
+# ---
+# apiVersion: v1
+# kind: Service
+# metadata:
+#   name: postgres
+#   namespace: imas
+# spec:
+#   selector:
+#     matchLabels:
+#       app.kubernetes.io/name: imas-manager
+#       app.kubernetes.io/component: database
+#   ports:
+#     - port: 5432
+#   clusterIP: None
+
+---
+# =============================================================================
+# Redis Deployment
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: imas
+  labels:
+    app.kubernetes.io/name: imas-manager
+    app.kubernetes.io/component: cache
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: imas-manager
+      app.kubernetes.io/component: cache
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: imas-manager
+        app.kubernetes.io/component: cache
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          command:
+            - redis-server
+            - --appendonly
+            - "yes"
+            - --maxmemory
+            - 256mb
+            - --maxmemory-policy
+            - allkeys-lru
+          ports:
+            - containerPort: 6379
+              name: redis
+          livenessProbe:
+            exec:
+              command:
+                - redis-cli
+                - ping
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command:
+                - redis-cli
+                - ping
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          volumeMounts:
+            - name: redis-data
+              mountPath: /data
+      volumes:
+        - name: redis-data
+          emptyDir: {}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: imas
+  labels:
+    app.kubernetes.io/name: imas-manager
+    app.kubernetes.io/component: cache
+spec:
+  selector:
+    app.kubernetes.io/name: imas-manager
+    app.kubernetes.io/component: cache
+  ports:
+    - port: 6379
+      targetPort: 6379

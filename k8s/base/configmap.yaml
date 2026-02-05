@@ -1,0 +1,24 @@
+# =============================================================================
+# IMAS Manager - ConfigMap
+# Non-sensitive configuration values
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: imas-config
+  namespace: imas
+  labels:
+    app.kubernetes.io/name: imas-manager
+data:
+  DEBUG: "False"
+  ALLOWED_HOSTS: "imas.example.com,localhost"
+  DJANGO_SETTINGS_MODULE: "config.settings"
+  GUNICORN_WORKERS: "4"
+  CELERY_CONCURRENCY: "4"
+  # Database host (service name)
+  POSTGRES_HOST: "postgres"
+  POSTGRES_PORT: "5432"
+  POSTGRES_DB: "imas_db"
+  # Redis host (service name)  
+  REDIS_HOST: "redis"
+  REDIS_PORT: "6379"
